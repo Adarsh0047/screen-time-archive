@@ -68,6 +68,8 @@ optimization, so every app launch also performs a safe automatic catch-up.
 - Minimum Android version: Android 8.0 (API 26)
 - Target Android version: Android 15 (API 35)
 - Uses only Android framework APIs; no third-party runtime libraries
+- CI debug builds use the repository's non-production debug key so future APKs
+  can update one another. Never use this key for a Play Store release.
 - Usage source: `UsageStatsManager`
 - Local archive: `SQLiteOpenHelper`
 - Background collection: `JobScheduler`
