@@ -1,221 +1,232 @@
 package com.adarsh.screentimearchive;
 
-import android.app.Activity;
-import android.app.DatePickerDialog;
-import android.content.Intent;
+import android.app.*;
+import android.content.*;
+import android.content.res.Configuration;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Settings;
-import android.view.View;
-import android.widget.Button;
-import android.widget.LinearLayout;
-import android.widget.ProgressBar;
-import android.widget.TextView;
-import android.widget.Toast;
-
-import java.io.InputStream;
-import java.io.OutputStream;
+import android.view.*;
+import android.widget.*;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
-import java.time.DayOfWeek;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneId;
-import java.util.Calendar;
-import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.time.*;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
+import java.util.concurrent.*;
 
 public class MainActivity extends Activity {
-    private static final String PREFS = "screen_time_settings";
-    private static final String KEY_PURCHASE_DATE = "purchase_date";
-    private static final int EXPORT_REQUEST = 1001, IMPORT_REQUEST = 1002;
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    private View overviewScreen, historyScreen, insightsScreen, dataScreen;
-    private LinearLayout recentRows;
-    private Button overviewTab, historyTab, insightsTab, dataTab, permissionButton, dateButton, exportButton;
-    private TextView permissionTitle, permissionBody, todayValue, todayCaption, weekAverage, weekChange;
-    private TextView historySummary, lifetimeValue, lifetimeCaption, insightWeekday, insightHighest;
-    private TextView insightTrend, insightStreak, archiveStatus, refreshStatus;
-    private ProgressBar progress;
-    private TrendChartView weekChart, historyChart;
-    private long purchaseDateMillis;
-    private boolean refreshRunning;
-    private UsageRepository.ScanResult lastResult;
+    private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    private final Map<LocalDate, HistoryDb.DayEntry> days = new TreeMap<>();
+    private UsageRepository.ScanResult result;
+    private LinearLayout root, body;
+    private String page = "Overview", range = "Month";
+    private LocalDate anchor = LocalDate.now();
+    private boolean busy;
+    private int bg, surface, ink, muted, accent;
+    private SharedPreferences prefs;
+    private String status = "Loading saved archive…";
+    private long start;
+    private int dp(float v) { return Math.round(v * getResources().getDisplayMetrics().density); }
+    private String date(LocalDate d) { return d.format(DateTimeFormatter.ofPattern("d MMM yyyy")); }
+    private String duration(long v) { return UsageRepository.formatDuration(v); }
 
-    @Override protected void onCreate(Bundle state) {
-        super.onCreate(state); setContentView(R.layout.activity_main); bindViews();
-        purchaseDateMillis = getSharedPreferences(PREFS, MODE_PRIVATE).getLong(KEY_PURCHASE_DATE, 0L);
-        if (purchaseDateMillis == 0L) {
-            purchaseDateMillis = UsageRepository.atStartOfDay(LocalDate.of(2024, 1, 1));
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putLong(KEY_PURCHASE_DATE, purchaseDateMillis).apply();
-        }
-        updateDateButton(); showScreen(overviewScreen, overviewTab);
-        overviewTab.setOnClickListener(v -> showScreen(overviewScreen, overviewTab));
-        historyTab.setOnClickListener(v -> showScreen(historyScreen, historyTab));
-        insightsTab.setOnClickListener(v -> showScreen(insightsScreen, insightsTab));
-        dataTab.setOnClickListener(v -> showScreen(dataScreen, dataTab));
-        permissionButton.setOnClickListener(v -> openUsageAccessSettings());
-        dateButton.setOnClickListener(v -> choosePurchaseDate());
-        exportButton.setOnClickListener(v -> beginExport());
-        findViewById(R.id.importButton).setOnClickListener(v -> beginImport());
-        ArchiveScheduler.schedule(this); updatePermissionUi(); automaticRefresh();
+    @Override public void onCreate(Bundle state) {
+        super.onCreate(state);
+        prefs = getSharedPreferences("screen_time_settings", MODE_PRIVATE);
+        start = prefs.getLong("purchase_date", UsageRepository.atStartOfDay(LocalDate.of(2024,1,1)));
+        if (state != null) { page = state.getString("page", page); range = state.getString("range", range); anchor = LocalDate.parse(state.getString("anchor", anchor.toString())); }
+        render();
+        ArchiveScheduler.schedule(this);
     }
-
-    private void bindViews() {
-        overviewScreen = findViewById(R.id.overviewScreen); historyScreen = findViewById(R.id.historyScreen);
-        insightsScreen = findViewById(R.id.insightsScreen); dataScreen = findViewById(R.id.dataScreen);
-        overviewTab = findViewById(R.id.overviewTab); historyTab = findViewById(R.id.historyTab);
-        insightsTab = findViewById(R.id.insightsTab); dataTab = findViewById(R.id.dataTab);
-        permissionTitle = findViewById(R.id.permissionTitle); permissionBody = findViewById(R.id.permissionBody);
-        permissionButton = findViewById(R.id.permissionButton); dateButton = findViewById(R.id.dateButton);
-        exportButton = findViewById(R.id.exportButton); progress = findViewById(R.id.progress);
-        todayValue = findViewById(R.id.todayValue); todayCaption = findViewById(R.id.todayCaption);
-        weekAverage = findViewById(R.id.weekAverage); weekChange = findViewById(R.id.weekChange);
-        historySummary = findViewById(R.id.historySummary); lifetimeValue = findViewById(R.id.lifetimeValue);
-        lifetimeCaption = findViewById(R.id.lifetimeCaption); insightWeekday = findViewById(R.id.insightWeekday);
-        insightHighest = findViewById(R.id.insightHighest); insightTrend = findViewById(R.id.insightTrend);
-        insightStreak = findViewById(R.id.insightStreak); archiveStatus = findViewById(R.id.archiveStatus);
-        refreshStatus = findViewById(R.id.refreshStatus); recentRows = findViewById(R.id.recentRows);
-        weekChart = findViewById(R.id.weekChart); historyChart = findViewById(R.id.historyChart);
+    @Override protected void onSaveInstanceState(Bundle b) {
+        super.onSaveInstanceState(b); b.putString("page",page); b.putString("range",range); b.putString("anchor",anchor.toString());
     }
-
-    @Override protected void onResume() {
-        super.onResume(); updatePermissionUi();
-        if (UsagePermission.isGranted(this)) { ArchiveScheduler.schedule(this); automaticRefresh(); }
-    }
-
-    private void automaticRefresh() {
-        if (refreshRunning || !UsagePermission.isGranted(this)) return;
-        refreshRunning = true; progress.setVisibility(View.VISIBLE); refreshStatus.setText("Updating automatically…");
-        long start = purchaseDateMillis;
-        executor.execute(() -> {
+    @Override public void onResume() { super.onResume(); refresh(); }
+    private void refresh() {
+        if (busy) return;
+        busy = true;
+        worker.execute(() -> {
             try {
-                UsageRepository.ScanResult result = new UsageRepository(this).scan(start);
-                runOnUiThread(() -> display(result));
-            } catch (Exception error) {
-                runOnUiThread(() -> { refreshRunning = false; progress.setVisibility(View.GONE);
-                    refreshStatus.setText("Automatic update could not finish. Check usage access and battery settings."); });
-            }
+                UsageRepository.ScanResult updated = UsagePermission.isGranted(this) ? new UsageRepository(this).scan(start) : null;
+                List<HistoryDb.DayEntry> saved;
+                try (HistoryDb db = new HistoryDb(this)) { saved = db.getDaysSince(0); }
+                runOnUiThread(() -> {
+                    if (isDestroyed()) return;
+                    result = updated; days.clear();
+                    for (HistoryDb.DayEntry d : saved) days.put(Instant.ofEpochMilli(d.dayStart).atZone(ZoneId.systemDefault()).toLocalDate(),d);
+                    busy = false; status = updated == null ? "Usage access needed for automatic collection" : "Updated " + java.time.LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"));
+                    render();
+                });
+            } catch (Exception e) { runOnUiThread(() -> { busy=false; status="Update unavailable. Saved records are kept."; if (!isDestroyed()) render(); }); }
         });
     }
-
-    private void display(UsageRepository.ScanResult result) {
-        lastResult = result; refreshRunning = false; progress.setVisibility(View.GONE);
-        List<HistoryDb.DayEntry> days = result.archivedDays;
-        long todayMs = days.isEmpty() ? 0L : days.get(days.size() - 1).durationMs;
-        todayValue.setText(UsageRepository.formatDuration(todayMs));
-        todayCaption.setText("Today so far · updated automatically");
-        long currentWeek = sumTail(days, 7, 0), previousWeek = sumTail(days, 7, 7);
-        int count = Math.min(7, days.size());
-        weekAverage.setText(count == 0 ? "—" : UsageRepository.formatDuration(currentWeek / count));
-        weekChange.setText(comparison(currentWeek, previousWeek));
-        weekChart.setDays(days, 7); historyChart.setDays(days, 30);
-        lifetimeValue.setText(UsageRepository.formatDuration(result.lifetimeEstimateMs));
-        lifetimeCaption.setText("Estimated foreground time since " + UsageRepository.formatDate(result.purchaseDate));
-        historySummary.setText(days.size() + " daily records preserved on this phone");
-        buildRecentRows(days); buildInsights(days, currentWeek, previousWeek);
-        archiveStatus.setText("Automatic archive: " + (ArchiveScheduler.isScheduled(this) ? "active" : "waiting")
-                + "\n" + days.size() + " daily records stored privately");
-        refreshStatus.setText("Last automatic update: just now"); exportButton.setEnabled(true);
+    private void palette() {
+        String mode=prefs.getString("theme","Dark");
+        boolean dark=mode.equals("Dark") || (mode.equals("System") && (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES);
+        bg=Color.parseColor(dark?"#101119":"#F5F5FB"); surface=Color.parseColor(dark?"#1D1F2C":"#FFFFFF");
+        ink=Color.parseColor(dark?"#F3F2FA":"#202130"); muted=Color.parseColor(dark?"#A8AABC":"#646779"); accent=Color.parseColor(dark?"#B7ABFF":"#6555CD");
+        getWindow().setStatusBarColor(bg); getWindow().setNavigationBarColor(bg);
+        getWindow().getDecorView().setSystemUiVisibility(dark?0:View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
     }
-
-    private void buildRecentRows(List<HistoryDb.DayEntry> days) {
-        recentRows.removeAllViews(); int first = Math.max(0, days.size() - 14);
-        for (int i = days.size() - 1; i >= first; i--) {
-            HistoryDb.DayEntry day = days.get(i); TextView row = new TextView(this);
-            row.setText(UsageRepository.formatDate(day.dayStart) + "\n" + UsageRepository.formatDuration(day.durationMs));
-            row.setTextColor(getColor(R.color.text_primary)); row.setTextSize(16f); row.setPadding(0, dp(12), 0, dp(12));
-            recentRows.addView(row);
+    private void render() {
+        palette();
+        root=new LinearLayout(this); root.setOrientation(1); root.setBackgroundColor(bg);
+        // Consume system insets explicitly, including Android 15 edge-to-edge.
+        root.setOnApplyWindowInsetsListener((v,i)->{ v.setPadding(i.getSystemWindowInsetLeft(),i.getSystemWindowInsetTop(),i.getSystemWindowInsetRight(),i.getSystemWindowInsetBottom()); return i.consumeSystemWindowInsets(); });
+        setContentView(root); root.requestApplyInsets();
+        LinearLayout header=new LinearLayout(this); header.setGravity(Gravity.CENTER_VERTICAL); header.setPadding(dp(20),dp(12),dp(12),dp(6));
+        TextView title=text("Daytrace",22,true); header.addView(title,new LinearLayout.LayoutParams(0,-2,1));
+        Button settings=button("Settings",()->{page="Settings";render();}); header.addView(settings); root.addView(header);
+        ScrollView scroll=new ScrollView(this); scroll.setFillViewport(true); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        body=new LinearLayout(this); body.setOrientation(1); body.setPadding(dp(20),dp(12),dp(20),dp(28)); scroll.addView(body);
+        label(body,page,30,true);
+        if (!UsagePermission.isGranted(this)) { LinearLayout c=card(); label(c,"Enable automatic archiving",19,true); label(c,"Grant Usage Access once. No manual scan is required.",14,false); c.addView(button("Grant Usage Access",()->startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)))); }
+        switch(page) { case "History": history();break; case "Insights": insights();break; case "Settings": settings();break; case "Data": data();break; default: overview(); }
+        LinearLayout nav=new LinearLayout(this); nav.setBackgroundColor(surface);
+        for(String p:new String[]{"Overview","History","Insights","Data"}) {
+            Button b=button(p,()->{page=p;render();}); b.setTextSize(12); b.setTextColor(page.equals(p)?accent:muted); b.setMinWidth(0); b.setPadding(0,dp(8),0,dp(8));
+            nav.addView(b,new LinearLayout.LayoutParams(0,dp(58),1));
+        }
+        root.addView(nav);
+    }
+    private TextView text(String s,int size,boolean bold) {
+        TextView t=new TextView(this); t.setText(s); t.setTextSize(size); t.setTextColor(bold?ink:muted);
+        if(bold)t.setTypeface(Typeface.DEFAULT,Typeface.BOLD); return t;
+    }
+    private void label(LinearLayout p,String s,int size,boolean bold) { TextView t=text(s,size,bold); t.setPadding(0,dp(4),0,dp(6)); p.addView(t); }
+    private Button button(String s,Runnable action) {
+        Button b=new Button(this); b.setText(s); b.setTextSize(14); b.setTextColor(accent); b.setAllCaps(false); b.setMinHeight(dp(48));
+        b.setBackgroundColor(Color.TRANSPARENT); b.setOnClickListener(v->action.run()); return b;
+    }
+    private GradientDrawable shape(int color) { GradientDrawable d=new GradientDrawable(); d.setColor(color); d.setCornerRadius(dp(18)); return d; }
+    private LinearLayout card() {
+        LinearLayout c=new LinearLayout(this); c.setOrientation(1); c.setPadding(dp(16),dp(14),dp(16),dp(14)); c.setBackground(shape(surface));
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2); lp.topMargin=dp(14); body.addView(c,lp); return c;
+    }
+    private long value(LocalDate d) { return days.containsKey(d)?days.get(d).durationMs:0; }
+    private boolean complete(LocalDate a,LocalDate b) { for(LocalDate d=a;d.isBefore(b);d=d.plusDays(1))if(!days.containsKey(d))return false;return true; }
+    private long sum(LocalDate a,LocalDate b) { long n=0;for(Map.Entry<LocalDate,HistoryDb.DayEntry> e:days.entrySet())if(!e.getKey().isBefore(a)&&e.getKey().isBefore(b))n+=e.getValue().durationMs;return n; }
+    private String trend() {
+        LocalDate t=LocalDate.now();
+        if(!complete(t.minusDays(14),t))return "Need 14 recorded, completed days for a fair comparison";
+        long now=sum(t.minusDays(7),t),old=sum(t.minusDays(14),t.minusDays(7));
+        if(old==0)return "Previous week has no recorded usage";
+        return Math.round(Math.abs(now-old)*100.0/old)+"% "+(now<old?"lower":now>old?"higher":"change")+" vs previous week";
+    }
+    private void overview() {
+        LocalDate t=LocalDate.now(); LinearLayout c=card(); label(c,"TODAY · PARTIAL DAY",12,false);
+        label(c,days.containsKey(t)?duration(value(t)):"Not recorded",38,true); label(c,status,13,false);
+        c=card();label(c,"Last 7 completed days",18,true);
+        label(c,complete(t.minusDays(7),t)?duration(sum(t.minusDays(7),t)/7)+" / day":"Incomplete week",25,true);
+        label(c,trend(),14,false); bars(c,t.minusDays(7),t);
+        c=card();label(c,"Your archive",18,true);label(c,days.size()+" daily records · stored on this phone",14,false);
+        label(c,"Historical summaries are estimates. Missing days are not zero-use days.",14,false);
+        c.addView(button("Explore history →",()->{page="History";render();}));
+    }
+    private void choose(java.util.function.Consumer<LocalDate> cb) {
+        DatePickerDialog d=new DatePickerDialog(this,(v,y,m,day)->cb.accept(LocalDate.of(y,m+1,day)),anchor.getYear(),anchor.getMonthValue()-1,anchor.getDayOfMonth());
+        d.getDatePicker().setMaxDate(System.currentTimeMillis());d.show();
+    }
+    private void history() {
+        HorizontalScrollView filters=new HorizontalScrollView(this);filters.setHorizontalScrollBarEnabled(false);LinearLayout choices=new LinearLayout(this);
+        for(String r:new String[]{"Day","Week","Month","Year","All time"}) { Button b=button(r,()->{range=r;render();}); if(r.equals(range))b.setBackground(shape(surface));choices.addView(b); }
+        filters.addView(choices);body.addView(filters);
+        LinearLayout controls=new LinearLayout(this);
+        controls.addView(button("‹",()->move(-1)));
+        Button selected=button(date(anchor),()->choose(d->{anchor=d;render();}));controls.addView(selected,new LinearLayout.LayoutParams(0,-2,1));
+        controls.addView(button("›",()->move(1)));body.addView(controls);
+        if(range.equals("Year")||range.equals("All time")) {
+            LinearLayout c=card();label(c,"Historical aggregate estimates",20,true);
+            label(c,"Android summaries can be incomplete and cannot be converted into daily history.",14,false);
+            if(result==null)label(c,"Grant Usage Access to load retained summaries.",14,false);
+            else for(UsageRepository.PeriodUsage p:result.years)if(range.equals("All time")||p.label.equals(""+anchor.getYear()))label(c,p.label+" · "+duration(p.durationMs)+" · estimate",17,true);
+            c=card();label(c,"Daily archive by month",20,true);
+            int year=anchor.getYear();
+            for(int m=1;m<=12;m++){LocalDate a=LocalDate.of(year,m,1);long n=sum(a,a.plusMonths(1));label(c,a.getMonth().toString()+" · "+duration(n)+" recorded",14,false);}
+            heatmap();return;
+        }
+        LocalDate a=range.equals("Day")?anchor:range.equals("Week")?anchor.minusDays(anchor.getDayOfWeek().getValue()-1):anchor.withDayOfMonth(1);
+        LocalDate b=range.equals("Day")?a.plusDays(1):range.equals("Week")?a.plusWeeks(1):a.plusMonths(1);
+        LinearLayout c=card(); label(c,date(a)+" — "+date(b.minusDays(1)),16,true);
+        label(c,duration(sum(a,b))+" recorded",28,true);label(c,"Only saved daily values are included; today is partial.",13,false);bars(c,a,b);
+        heatmap();
+    }
+    private void move(int n) { LocalDate next=range.equals("Day")?anchor.plusDays(n):range.equals("Week")?anchor.plusWeeks(n):range.equals("Month")?anchor.plusMonths(n):anchor.plusYears(n);if(!next.isAfter(LocalDate.now()))anchor=next;render(); }
+    private void bars(LinearLayout c,LocalDate a,LocalDate b) {
+        long max=1;for(LocalDate d=a;d.isBefore(b);d=d.plusDays(1))max=Math.max(max,value(d));
+        for(LocalDate d=a;d.isBefore(b)&&!d.isAfter(LocalDate.now());d=d.plusDays(1)) {
+            final LocalDate selected=d;LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(0,dp(6),0,dp(6));
+            TextView name=text(d.format(DateTimeFormatter.ofPattern("d MMM")),12,false);row.addView(name,new LinearLayout.LayoutParams(dp(52),-2));
+            ProgressBar bar=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);bar.setMax(1000);bar.setProgress((int)(value(d)*1000/max));bar.setProgressTintList(android.content.res.ColorStateList.valueOf(accent));row.addView(bar,new LinearLayout.LayoutParams(0,dp(16),1));
+            TextView amount=text(days.containsKey(d)?duration(value(d)):"No data",12,false);amount.setPadding(dp(8),0,0,0);row.addView(amount);row.setOnClickListener(v->detail(selected));c.addView(row);
         }
     }
-
-    private void buildInsights(List<HistoryDb.DayEntry> days, long currentWeek, long previousWeek) {
-        if (days.isEmpty()) return;
-        HistoryDb.DayEntry highest = days.get(0); long[] totals = new long[7]; int[] counts = new int[7];
-        for (HistoryDb.DayEntry day : days) {
-            if (day.durationMs > highest.durationMs) highest = day;
-            int index = Instant.ofEpochMilli(day.dayStart).atZone(ZoneId.systemDefault()).getDayOfWeek().getValue() - 1;
-            totals[index] += day.durationMs; counts[index]++;
-        }
-        int maxDay = 0;
-        for (int i = 1; i < 7; i++) if (average(totals, counts, i) > average(totals, counts, maxDay)) maxDay = i;
-        String weekday = DayOfWeek.of(maxDay + 1).toString();
-        insightWeekday.setText(weekday.substring(0, 1) + weekday.substring(1).toLowerCase());
-        insightHighest.setText(UsageRepository.formatDuration(highest.durationMs) + "\n" + UsageRepository.formatDate(highest.dayStart));
-        insightTrend.setText(comparison(currentWeek, previousWeek));
-        int streak = 0;
-        for (int i = days.size() - 1; i >= 0 && days.get(i).durationMs < 6L * 60L * 60L * 1000L; i--) streak++;
-        insightStreak.setText(streak + (streak == 1 ? " day" : " days") + " under 6h");
-    }
-
-    private long average(long[] totals, int[] counts, int i) { return counts[i] == 0 ? 0 : totals[i] / counts[i]; }
-    private long sumTail(List<HistoryDb.DayEntry> days, int count, int skip) {
-        long sum = 0; int end = Math.max(0, days.size() - skip);
-        for (int i = Math.max(0, end - count); i < end; i++) sum += days.get(i).durationMs;
-        return sum;
-    }
-    private String comparison(long current, long previous) {
-        if (previous <= 0) return "Not enough earlier data";
-        long percent = Math.round(Math.abs(current - previous) * 100.0 / previous);
-        return percent + "% " + (current <= previous ? "lower" : "higher") + " than previous 7 days";
-    }
-
-    private void showScreen(View selected, Button selectedTab) {
-        View[] screens = {overviewScreen, historyScreen, insightsScreen, dataScreen};
-        Button[] tabs = {overviewTab, historyTab, insightsTab, dataTab};
-        for (View screen : screens) screen.setVisibility(screen == selected ? View.VISIBLE : View.GONE);
-        for (Button tab : tabs) tab.setTextColor(getColor(tab == selectedTab ? R.color.accent : R.color.text_secondary));
-    }
-
-    private void updatePermissionUi() {
-        boolean granted = UsagePermission.isGranted(this);
-        permissionTitle.setText(granted ? "Usage access granted" : getString(R.string.usage_access_required));
-        permissionBody.setText(granted ? "Automatic daily archiving is enabled. Your data stays on this phone."
-                : getString(R.string.usage_access_explanation));
-        permissionButton.setVisibility(granted ? View.GONE : View.VISIBLE);
-    }
-    private void openUsageAccessSettings() {
-        try { Intent intent = new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS);
-            intent.setData(Uri.parse("package:" + getPackageName())); startActivity(intent);
-        } catch (Exception ignored) { startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)); }
-    }
-    private void choosePurchaseDate() {
-        Calendar c = Calendar.getInstance(); c.setTimeInMillis(purchaseDateMillis);
-        DatePickerDialog dialog = new DatePickerDialog(this, (picker, year, month, day) -> {
-            purchaseDateMillis = UsageRepository.atStartOfDay(LocalDate.of(year, month + 1, day));
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putLong(KEY_PURCHASE_DATE, purchaseDateMillis).apply();
-            updateDateButton(); automaticRefresh();
-        }, c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH));
-        dialog.getDatePicker().setMaxDate(System.currentTimeMillis()); dialog.show();
-    }
-    private void updateDateButton() { dateButton.setText(UsageRepository.formatDate(purchaseDateMillis)); }
-    private void beginImport() {
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("text/*");
-        startActivityForResult(intent, IMPORT_REQUEST);
-    }
-    private void beginExport() {
-        if (lastResult == null) return;
-        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("text/csv");
-        intent.putExtra(Intent.EXTRA_TITLE, "screen-time-history.csv"); startActivityForResult(intent, EXPORT_REQUEST);
-    }
-    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (resultCode != RESULT_OK || data == null || data.getData() == null) return;
-        if (requestCode == EXPORT_REQUEST && lastResult != null) {
-            try (OutputStream output = getContentResolver().openOutputStream(data.getData())) {
-                if (output == null) throw new IllegalStateException();
-                output.write(lastResult.toCsv().getBytes(StandardCharsets.UTF_8));
-                Toast.makeText(this, "CSV exported", Toast.LENGTH_SHORT).show();
-            } catch (Exception error) { Toast.makeText(this, "Export failed", Toast.LENGTH_LONG).show(); }
-        } else if (requestCode == IMPORT_REQUEST) {
-            Uri uri = data.getData(); executor.execute(() -> {
-                try (InputStream input = getContentResolver().openInputStream(uri)) {
-                    if (input == null) throw new IllegalStateException(); int imported = new UsageRepository(this).importCsv(input);
-                    runOnUiThread(() -> { Toast.makeText(this, imported + " new daily records imported", Toast.LENGTH_LONG).show(); automaticRefresh(); });
-                } catch (Exception error) { runOnUiThread(() -> Toast.makeText(this, "Import failed: check the CSV format", Toast.LENGTH_LONG).show()); }
-            });
+    private void heatmap() {
+        LinearLayout c=card();LocalDate first=anchor.withDayOfMonth(1);
+        label(c,first.format(DateTimeFormatter.ofPattern("MMMM yyyy"))+" · calendar",20,true);
+        label(c,"Tap a day for details. — = no record; darker = more usage.",13,false);
+        LinearLayout names=new LinearLayout(this);for(String s:new String[]{"M","T","W","T","F","S","S"}) { TextView t=text(s,12,false);t.setGravity(Gravity.CENTER);names.addView(t,new LinearLayout.LayoutParams(0,dp(28),1)); }c.addView(names);
+        int offset=first.getDayOfWeek().getValue()-1,total=first.lengthOfMonth();
+        for(int w=0;w<(offset+total+6)/7;w++) {
+            LinearLayout row=new LinearLayout(this);
+            for(int k=0;k<7;k++) {
+                int day=w*7+k-offset+1;TextView cell=text("",13,true);cell.setGravity(Gravity.CENTER);
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(46),1);lp.setMargins(dp(2),dp(2),dp(2),dp(2));row.addView(cell,lp);
+                if(day>0&&day<=total) {
+                    LocalDate d=first.withDayOfMonth(day);boolean exists=days.containsKey(d);
+                    cell.setText(day+(exists?"":"\n—")); cell.setTextColor(exists?Color.WHITE:muted);
+                    if(exists){int alpha=80+(int)Math.min(175,value(d)*175/(12L*3600000));cell.setBackground(shape(Color.argb(alpha,105,83,212)));}
+                    else cell.setBackground(shape(bg));
+                    cell.setContentDescription(date(d)+": "+(exists?duration(value(d)):"no data"));cell.setOnClickListener(v->detail(d));
+                }
+            }c.addView(row);
         }
     }
-    private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
-    @Override protected void onDestroy() { executor.shutdownNow(); super.onDestroy(); }
+    private void detail(LocalDate d) {
+        HistoryDb.DayEntry entry=days.get(d);
+        new AlertDialog.Builder(this).setTitle(date(d)).setMessage(entry==null?"No daily record. This does not mean zero usage.":duration(entry.durationMs)+"\nSource: "+entry.source+(d.equals(LocalDate.now())?"\nToday is still in progress.":"")).setPositiveButton("Close",null).show();
+    }
+    private void insights() {
+        LinearLayout c=card();label(c,"Weekly change",19,true);label(c,trend(),18,false);
+        LocalDate best=null;for(LocalDate d:days.keySet())if(d.isBefore(LocalDate.now())&&(best==null||value(d)>value(best)))best=d;
+        c=card();label(c,"Highest recorded completed day",19,true);label(c,best==null?"Not enough data":date(best)+" · "+duration(value(best)),20,false);
+        int streak=0,target=prefs.getInt("target",360);LocalDate d=LocalDate.now().minusDays(1);
+        while(days.containsKey(d)&&value(d)<=target*60000L){streak++;d=d.minusDays(1);}
+        c=card();label(c,"Consecutive days within target",19,true);label(c,streak+" days · target "+duration(target*60000L),22,true);
+        label(c,"Counts completed consecutive days only. A missing day breaks the streak.",14,false);
+    }
+    private void settings() {
+        LinearLayout c=card();label(c,"Appearance",20,true);
+        for(String mode:new String[]{"Dark","Light","System"})c.addView(button((prefs.getString("theme","Dark").equals(mode)?"✓ ":"")+mode,()->{prefs.edit().putString("theme",mode).apply();render();}));
+        c=card();label(c,"Daily target",20,true);label(c,duration(prefs.getInt("target",360)*60000L),23,true);
+        c.addView(button("Change target",()->{EditText input=new EditText(this);input.setInputType(2);input.setText(""+prefs.getInt("target",360));new AlertDialog.Builder(this).setTitle("Target in minutes (1–1440)").setView(input).setPositiveButton("Save",(d,w)->{try{int v=Integer.parseInt(input.getText().toString());if(v<1||v>1440)throw new Exception();prefs.edit().putInt("target",v).apply();render();}catch(Exception e){Toast.makeText(this,"Enter 1–1440 minutes",1).show();}}).setNegativeButton("Cancel",null).show();}));
+        c=card();label(c,"History start date",20,true);c.addView(button(UsageRepository.formatDate(start),()->choose(d->{start=UsageRepository.atStartOfDay(d);prefs.edit().putLong("purchase_date",start).apply();refresh();})));
+        c=card();label(c,"Automatic archiving",20,true);label(c,"Runs daily in the background and catches up when opened. Android can delay jobs; force-stop suspends them until the app is reopened.",14,false);
+        c.addView(button("Open app battery/settings",()->startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())))));
+    }
+    private void data() {
+        LinearLayout c=card();label(c,"Archive health",20,true);label(c,status,14,false);label(c,days.size()+" daily records",24,true);
+        label(c,"Background job: "+(ArchiveScheduler.isScheduled(this)?"scheduled":"not scheduled"),14,false);
+        label(c,"Older Android summaries are estimates, not complete daily records. Export before uninstalling.",14,false);
+        c.addView(button("Import CSV",()->startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*"),1002)));
+        c.addView(button("Export CSV",()->{if(result==null){Toast.makeText(this,"Usage access and a successful update are needed to export",1).show();return;}startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("text/csv").putExtra(Intent.EXTRA_TITLE,"screen-time-history.csv"),1001);}));
+        label(c,"Import currently adds missing daily rows only; existing records are preserved.",13,false);
+        c.addView(button("Settings →",()->{page="Settings";render();}));
+    }
+    @Override protected void onActivityResult(int request,int code,Intent data) {
+        super.onActivityResult(request,code,data);if(code!=RESULT_OK||data==null||data.getData()==null)return;
+        Uri uri=data.getData();worker.execute(()->{
+            String message;
+            try {
+                if(request==1002){try(InputStream in=getContentResolver().openInputStream(uri)){message=new UsageRepository(this).importCsv(in)+" new daily rows imported";}}
+                else {try(OutputStream out=getContentResolver().openOutputStream(uri)){out.write(result.toCsv().getBytes(StandardCharsets.UTF_8));message="Export saved";}}
+            }catch(Exception e){message="File operation failed";}
+            final String msg=message;runOnUiThread(()->{if(!isDestroyed()){Toast.makeText(this,msg,1).show();refresh();}});
+        });
+    }
+    @Override public void onDestroy(){worker.shutdown();super.onDestroy();}
 }

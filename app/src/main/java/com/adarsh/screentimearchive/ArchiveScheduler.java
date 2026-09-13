@@ -14,6 +14,7 @@ final class ArchiveScheduler {
     static void schedule(Context context) {
         JobScheduler scheduler = (JobScheduler) context.getSystemService(Context.JOB_SCHEDULER_SERVICE);
         if (scheduler == null) return;
+        if (scheduler.getPendingJob(JOB_ID) != null) return;
         JobInfo job = new JobInfo.Builder(
                 JOB_ID,
                 new ComponentName(context, ArchiveJobService.class))

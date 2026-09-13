@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Screen Time Archive</string>
+    <string name="app_name">Daytrace</string>
     <string name="usage_access_required">Usage access is required</string>
     <string name="usage_access_explanation">Android keeps this permission on a special Settings screen. No usage data leaves your phone.</string>
     <string name="grant_usage_access">Grant usage access</string>

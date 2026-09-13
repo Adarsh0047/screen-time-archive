@@ -93,7 +93,7 @@ final class UsageRepository {
             long start = atStartOfDay(day);
             long end = offset == 0 ? System.currentTimeMillis() : atStartOfDay(day.plusDays(1));
             long duration = queryEventDerivedScreenTime(start, end);
-            database.upsert(start, duration);
+            if (duration >= 0L) database.upsert(start, duration);
         }
     }
 
@@ -143,10 +143,10 @@ final class UsageRepository {
      * a day longer than the elapsed wall-clock period.
      */
     private long queryEventDerivedScreenTime(long start, long end) {
-        if (usageStatsManager == null || end <= start) return 0L;
+        if (usageStatsManager == null || end <= start) return -1L;
         long lookbackStart = Math.max(0L, start - 24L * 60L * 60L * 1000L);
         UsageEvents events = usageStatsManager.queryEvents(lookbackStart, end);
-        if (events == null) return 0L;
+        if (events == null || !events.hasNextEvent()) return -1L;
 
         Set<String> activeActivities = new HashSet<>();
         UsageEvents.Event event = new UsageEvents.Event();
