@@ -1,8 +1,8 @@
 # Screen Time Archive
 
 A private, non-root Android app that reads the usage history Android exposes,
-estimates historical foreground time, exports CSV, and preserves daily totals
-from the day the app is installed.
+estimates historical foreground time, exports CSV, and preserves event-derived
+daily totals from the day the app is installed.
 
 ## What it can recover
 
@@ -15,9 +15,10 @@ time estimate covering that period, but it cannot recreate a day-by-day history
 that Android has already deleted. It cannot read Digital Wellbeing's private
 database on a normal, non-rooted phone.
 
-The result is an **estimate of app foreground time**, not a certified measurement
-of screen-on time. Removed apps can be absent and simultaneous split-screen apps
-can overlap.
+Recent daily values are calculated from the union of launchable-app lifecycle
+events, preventing split-screen or duplicate lifecycle events from making a day
+longer than 24 hours. Older results remain filtered aggregate estimates rather
+than certified measurements of screen-on time. Removed apps can be absent.
 
 ## Privacy
 

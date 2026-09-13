@@ -2,6 +2,7 @@ package com.adarsh.screentimearchive;
 
 import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
+import android.app.usage.UsageEvents;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -25,16 +26,19 @@ final class UsageRepository {
     private final Context context;
     private final UsageStatsManager usageStatsManager;
     private final HistoryDb database;
-    private final Set<String> excludedPackages;
+    private final Set<String> homePackages;
+    private final Set<String> countedPackages;
 
     UsageRepository(Context context) {
         this.context = context.getApplicationContext();
         this.usageStatsManager = (UsageStatsManager)
                 this.context.getSystemService(Context.USAGE_STATS_SERVICE);
         this.database = new HistoryDb(this.context);
-        this.excludedPackages = findHomePackages();
-        this.excludedPackages.add(this.context.getPackageName());
-        this.excludedPackages.add("com.android.systemui");
+        this.homePackages = findPackagesForCategory(Intent.CATEGORY_HOME);
+        this.countedPackages = findPackagesForCategory(Intent.CATEGORY_LAUNCHER);
+        this.countedPackages.removeAll(homePackages);
+        this.countedPackages.remove(this.context.getPackageName());
+        this.countedPackages.remove("com.android.systemui");
     }
 
     ScanResult scan(long purchaseDateMillis) {
@@ -55,8 +59,9 @@ final class UsageRepository {
             long end = Math.min(System.currentTimeMillis(), atStartOfDay(yearEndDate));
             if (end <= start) continue;
 
-            long duration = queryForegroundTime(UsageStatsManager.INTERVAL_YEARLY, start, end);
-            years.add(new PeriodUsage(Integer.toString(year), start, end, duration, "Android yearly summary"));
+            long duration = queryFilteredAggregate(UsageStatsManager.INTERVAL_YEARLY, start, end);
+            years.add(new PeriodUsage(Integer.toString(year), start, end, duration,
+                    "Filtered Android yearly summary"));
             lifetimeEstimate += duration;
             if (duration > 0 && oldestAvailable == null) oldestAvailable = start;
         }
@@ -69,9 +74,10 @@ final class UsageRepository {
             long start = Math.max(purchaseDateMillis, atStartOfDay(month));
             long end = Math.min(System.currentTimeMillis(), atStartOfDay(month.plusMonths(1)));
             if (end <= start) continue;
-            long duration = queryForegroundTime(UsageStatsManager.INTERVAL_MONTHLY, start, end);
+            long duration = queryFilteredAggregate(UsageStatsManager.INTERVAL_MONTHLY, start, end);
             String label = month.format(DateTimeFormatter.ofPattern("MMM yyyy", Locale.getDefault()));
-            months.add(new PeriodUsage(label, start, end, duration, "Android monthly summary"));
+            months.add(new PeriodUsage(label, start, end, duration,
+                    "Filtered Android monthly summary"));
         }
 
         List<HistoryDb.DayEntry> archivedDays = database.getDaysSince(atStartOfDay(purchaseDate));
@@ -86,33 +92,90 @@ final class UsageRepository {
             LocalDate day = today.minusDays(offset);
             long start = atStartOfDay(day);
             long end = offset == 0 ? System.currentTimeMillis() : atStartOfDay(day.plusDays(1));
-            long duration = queryForegroundTime(UsageStatsManager.INTERVAL_DAILY, start, end);
+            long duration = queryEventDerivedScreenTime(start, end);
             database.upsert(start, duration);
         }
     }
 
-    private long queryForegroundTime(int interval, long start, long end) {
+    private long queryFilteredAggregate(int interval, long start, long end) {
         if (usageStatsManager == null || end <= start) return 0L;
         List<UsageStats> stats = usageStatsManager.queryUsageStats(interval, start, end);
         if (stats == null) return 0L;
 
         long total = 0L;
         for (UsageStats usage : stats) {
-            if (!excludedPackages.contains(usage.getPackageName())) {
+            if (countedPackages.contains(usage.getPackageName())) {
                 total += Math.max(0L, usage.getTotalTimeInForeground());
             }
         }
         return total;
     }
 
-    private Set<String> findHomePackages() {
+    /**
+     * Calculates the union of visible, launchable app sessions. A union is used
+     * so split-screen activities and duplicate OEM lifecycle events cannot make
+     * a day longer than the elapsed wall-clock period.
+     */
+    private long queryEventDerivedScreenTime(long start, long end) {
+        if (usageStatsManager == null || end <= start) return 0L;
+        long lookbackStart = Math.max(0L, start - 24L * 60L * 60L * 1000L);
+        UsageEvents events = usageStatsManager.queryEvents(lookbackStart, end);
+        if (events == null) return 0L;
+
+        Set<String> activeActivities = new HashSet<>();
+        UsageEvents.Event event = new UsageEvents.Event();
+        long cursor = lookbackStart;
+        long total = 0L;
+
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event);
+            long timestamp = Math.max(cursor, Math.min(end, event.getTimeStamp()));
+            if (!activeActivities.isEmpty()) {
+                total += overlapMillis(cursor, timestamp, start, end);
+            }
+
+            String packageName = event.getPackageName();
+            int type = event.getEventType();
+            if (type == UsageEvents.Event.SCREEN_NON_INTERACTIVE
+                    || type == UsageEvents.Event.KEYGUARD_SHOWN) {
+                activeActivities.clear();
+            } else if (packageName != null && homePackages.contains(packageName)
+                    && type == UsageEvents.Event.ACTIVITY_RESUMED) {
+                activeActivities.clear();
+            } else if (packageName != null && countedPackages.contains(packageName)) {
+                String className = event.getClassName() == null ? "" : event.getClassName();
+                String activityKey = packageName + "/" + className;
+                if (type == UsageEvents.Event.ACTIVITY_RESUMED) {
+                    activeActivities.add(activityKey);
+                } else if (type == UsageEvents.Event.ACTIVITY_PAUSED
+                        || type == UsageEvents.Event.ACTIVITY_STOPPED) {
+                    activeActivities.remove(activityKey);
+                }
+            }
+            cursor = timestamp;
+        }
+
+        if (!activeActivities.isEmpty()) {
+            total += overlapMillis(cursor, end, start, end);
+        }
+        return Math.min(Math.max(0L, total), end - start);
+    }
+
+    private static long overlapMillis(long intervalStart, long intervalEnd,
+                                      long windowStart, long windowEnd) {
+        long clippedStart = Math.max(intervalStart, windowStart);
+        long clippedEnd = Math.min(intervalEnd, windowEnd);
+        return Math.max(0L, clippedEnd - clippedStart);
+    }
+
+    private Set<String> findPackagesForCategory(String category) {
         Set<String> packages = new HashSet<>();
-        Intent homeIntent = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME);
+        Intent intent = new Intent(Intent.ACTION_MAIN).addCategory(category);
         PackageManager pm = context.getPackageManager();
-        List<ResolveInfo> homes = pm.queryIntentActivities(homeIntent, PackageManager.MATCH_ALL);
-        for (ResolveInfo home : homes) {
-            if (home.activityInfo != null && home.activityInfo.packageName != null) {
-                packages.add(home.activityInfo.packageName);
+        List<ResolveInfo> matches = pm.queryIntentActivities(intent, PackageManager.MATCH_ALL);
+        for (ResolveInfo match : matches) {
+            if (match.activityInfo != null && match.activityInfo.packageName != null) {
+                packages.add(match.activityInfo.packageName);
             }
         }
         return packages;
@@ -195,7 +258,7 @@ final class UsageRepository {
                         .append(date.format(iso)).append(',')
                         .append(date.plusDays(1).format(iso)).append(',')
                         .append(day.durationMs / 60_000L).append(',')
-                        .append("local archive").append('\n');
+                        .append("event-derived local archive").append('\n');
             }
             return csv.toString();
         }

@@ -175,7 +175,7 @@ public class MainActivity extends Activity {
             resultDetails.setText(
                     "Estimated app foreground time since " + UsageRepository.formatDate(result.purchaseDate) +
                     ". The oldest surviving aggregate overlaps: " + oldest + ".\n\n" +
-                    "This is not a recovered Digital Wellbeing database. Old daily detail may already be gone, removed apps may be missing, and split-screen use can overlap."
+                    "Recent daily values use the union of app lifecycle events. Older yearly and monthly values are filtered, coarse Android summaries; removed apps may be missing."
             );
         }
 
@@ -211,7 +211,8 @@ public class MainActivity extends Activity {
             for (int i = result.archivedDays.size() - 1; i >= first; i--) {
                 HistoryDb.DayEntry day = result.archivedDays.get(i);
                 addHistoryRow(UsageRepository.formatDate(day.dayStart),
-                        UsageRepository.formatDuration(day.durationMs), "saved on this phone");
+                        UsageRepository.formatDuration(day.durationMs),
+                        "event-derived and saved on this phone");
             }
         }
 
