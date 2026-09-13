@@ -22,4 +22,9 @@ final class ArchiveScheduler {
                 .build();
         scheduler.schedule(job);
     }
+
+    static boolean isScheduled(Context context) {
+        JobScheduler scheduler = (JobScheduler) context.getSystemService(Context.JOB_SCHEDULER_SERVICE);
+        return scheduler != null && scheduler.getPendingJob(JOB_ID) != null;
+    }
 }

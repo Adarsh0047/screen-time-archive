@@ -11,7 +11,7 @@ import java.util.List;
 
 final class HistoryDb extends SQLiteOpenHelper {
     private static final String DB_NAME = "screen_time_archive.db";
-    private static final int DB_VERSION = 1;
+    private static final int DB_VERSION = 2;
 
     HistoryDb(Context context) {
         super(context, DB_NAME, null, DB_VERSION);
@@ -22,12 +22,15 @@ final class HistoryDb extends SQLiteOpenHelper {
         db.execSQL("CREATE TABLE daily_usage (" +
                 "day_start INTEGER PRIMARY KEY," +
                 "duration_ms INTEGER NOT NULL," +
-                "collected_at INTEGER NOT NULL)");
+                "collected_at INTEGER NOT NULL," +
+                "source TEXT NOT NULL DEFAULT 'automatic')");
     }
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        // Version 1 has no migrations.
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE daily_usage ADD COLUMN source TEXT NOT NULL DEFAULT 'automatic'");
+        }
     }
 
     void upsert(long dayStart, long durationMs) {
@@ -35,21 +38,39 @@ final class HistoryDb extends SQLiteOpenHelper {
         values.put("day_start", dayStart);
         values.put("duration_ms", durationMs);
         values.put("collected_at", System.currentTimeMillis());
+        values.put("source", "automatic");
         getWritableDatabase().insertWithOnConflict(
                 "daily_usage", null, values, SQLiteDatabase.CONFLICT_REPLACE);
+    }
+
+    boolean importDay(long dayStart, long durationMs) {
+        ContentValues values = new ContentValues();
+        values.put("day_start", dayStart);
+        values.put("duration_ms", durationMs);
+        values.put("collected_at", System.currentTimeMillis());
+        values.put("source", "csv import");
+        return getWritableDatabase().insertWithOnConflict(
+                "daily_usage", null, values, SQLiteDatabase.CONFLICT_IGNORE) != -1L;
+    }
+
+    int getDayCount() {
+        try (Cursor cursor = getReadableDatabase().rawQuery(
+                "SELECT COUNT(*) FROM daily_usage", null)) {
+            return cursor.moveToFirst() ? cursor.getInt(0) : 0;
+        }
     }
 
     List<DayEntry> getDaysSince(long since) {
         List<DayEntry> rows = new ArrayList<>();
         try (Cursor cursor = getReadableDatabase().query(
                 "daily_usage",
-                new String[]{"day_start", "duration_ms"},
+                new String[]{"day_start", "duration_ms", "source"},
                 "day_start >= ?",
                 new String[]{Long.toString(since)},
                 null, null,
                 "day_start ASC")) {
             while (cursor.moveToNext()) {
-                rows.add(new DayEntry(cursor.getLong(0), cursor.getLong(1)));
+                rows.add(new DayEntry(cursor.getLong(0), cursor.getLong(1), cursor.getString(2)));
             }
         }
         return rows;
@@ -58,10 +79,12 @@ final class HistoryDb extends SQLiteOpenHelper {
     static final class DayEntry {
         final long dayStart;
         final long durationMs;
+        final String source;
 
-        DayEntry(long dayStart, long durationMs) {
+        DayEntry(long dayStart, long durationMs, String source) {
             this.dayStart = dayStart;
             this.durationMs = durationMs;
+            this.source = source;
         }
     }
 }

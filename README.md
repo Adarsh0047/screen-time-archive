@@ -1,8 +1,7 @@
 # Screen Time Archive
 
-A private, non-root Android app that reads the usage history Android exposes,
-estimates historical foreground time, exports CSV, and preserves event-derived
-daily totals from the day the app is installed.
+A private, non-root Android dashboard that visualizes the usage history Android
+exposes and automatically preserves event-derived daily totals locally.
 
 ## What it can recover
 
@@ -45,16 +44,24 @@ than certified measurements of screen-on time. Removed apps can be absent.
 Android will warn that the APK is from outside the Play Store. Only install an
 APK you built from source you control.
 
+## Features
+
+- Overview with today, seven-day average, comparison, and bar chart
+- Thirty-day history chart and recent daily values
+- Weekday, peak-day, trend, and under-six-hour streak insights
+- Automatic daily collection with ten-day catch-up and boot persistence
+- Duplicate-safe CSV import plus CSV export
+- Four-tab Material-style interface; no network permission or analytics
+
 ## First run
 
 1. Tap **Grant usage access** and enable Screen Time Archive.
 2. Return to the app.
-3. Choose the date the phone was bought or first used.
-4. Tap **Scan retained history**.
+3. The first-use date defaults to 1 January 2024 and can be changed under Data.
+4. History loads and archives automatically; there is no manual scan step.
 
-Keep usage access enabled so the scheduled job can backfill the most recent ten
-days into the private archive. Android may delay background work under aggressive
-battery optimization, so opening the app occasionally is useful.
+Keep usage access enabled. Android may defer exact background timing under battery
+optimization, so every app launch also performs a safe automatic catch-up.
 
 ## Technical notes
 

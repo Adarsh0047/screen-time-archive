@@ -5,7 +5,7 @@
     <string name="grant_usage_access">Grant usage access</string>
     <string name="purchase_date">Phone purchase / first-use date</string>
     <string name="choose_date">Choose date</string>
-    <string name="scan_history">Scan retained history</string>
+    <string name="scan_history">Update history</string>
     <string name="export_csv">Export CSV</string>
-    <string name="not_scanned">Choose the date and scan to see what Android still retains.</string>
+    <string name="not_scanned">History updates automatically after usage access is granted.</string>
 </resources>

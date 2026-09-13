@@ -1,168 +1,126 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@color/background"
-    android:fillViewport="true">
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="@color/background">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:paddingStart="20dp"
-        android:paddingTop="32dp"
-        android:paddingEnd="20dp"
-        android:paddingBottom="40dp">
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="SCREEN TIME ARCHIVE"
-            android:textColor="@color/accent"
-            android:textSize="13sp"
-            android:textStyle="bold"
-            android:letterSpacing="0.12" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="How much time has this phone really seen?"
-            android:textColor="@color/text_primary"
-            android:textSize="30sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:text="Scan Android’s retained usage summaries, then keep your own private daily archive from today onward."
-            android:textColor="@color/text_secondary"
-            android:textSize="16sp" />
-
-        <LinearLayout
-            android:id="@+id/permissionPanel"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:background="@drawable/panel_background"
-            android:orientation="vertical">
-
-            <TextView
-                android:id="@+id/permissionTitle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/usage_access_required"
-                android:textColor="@color/text_primary"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/permissionBody"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="@string/usage_access_explanation"
-                android:textColor="@color/text_secondary"
-                android:textSize="14sp" />
-
-            <Button
-                android:id="@+id/permissionButton"
-                android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:layout_marginTop="14dp"
-                android:background="@drawable/button_primary"
-                android:text="@string/grant_usage_access"
-                android:textAllCaps="false"
-                android:textColor="#FFFFFFFF"
-                android:textSize="16sp" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:background="@drawable/panel_background"
-            android:orientation="vertical">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/purchase_date"
-                android:textColor="@color/text_primary"
-                android:textSize="16sp"
-                android:textStyle="bold" />
-
-            <Button
-                android:id="@+id/dateButton"
-                android:layout_width="match_parent"
-                android:layout_height="50dp"
-                android:layout_marginTop="10dp"
-                android:text="@string/choose_date"
-                android:textAllCaps="false"
-                android:textSize="16sp" />
-
-            <Button
-                android:id="@+id/scanButton"
-                android:layout_width="match_parent"
-                android:layout_height="54dp"
-                android:layout_marginTop="10dp"
-                android:background="@drawable/button_primary"
-                android:text="@string/scan_history"
-                android:textAllCaps="false"
-                android:textColor="#FFFFFFFF"
-                android:textSize="16sp" />
-        </LinearLayout>
-
-        <ProgressBar
-            android:id="@+id/progress"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="match_parent"
-            android:layout_height="6dp"
-            android:layout_marginTop="18dp"
-            android:indeterminate="true"
-            android:visibility="gone" />
-
-        <LinearLayout
-            android:id="@+id/resultPanel"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:background="@drawable/panel_background"
-            android:orientation="vertical">
-
-            <TextView
-                android:id="@+id/resultHeadline"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/not_scanned"
-                android:textColor="@color/text_primary"
-                android:textSize="20sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/resultDetails"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:textColor="@color/text_secondary"
-                android:textSize="15sp" />
-
-            <LinearLayout
-                android:id="@+id/historyRows"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:orientation="vertical" />
-
-            <Button
-                android:id="@+id/exportButton"
-                android:layout_width="match_parent"
-                android:layout_height="50dp"
-                android:layout_marginTop="14dp"
-                android:text="@string/export_csv"
-                android:textAllCaps="false"
-                android:visibility="gone" />
-        </LinearLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:paddingStart="20dp" android:paddingTop="22dp" android:paddingEnd="20dp">
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="SCREEN TIME ARCHIVE" android:textColor="@color/accent" android:textSize="12sp"
+            android:textStyle="bold" android:letterSpacing="0.12" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:layout_marginTop="4dp" android:text="Your time, clearly." android:textColor="@color/text_primary"
+            android:textSize="27sp" android:textStyle="bold" />
+        <ProgressBar android:id="@+id/progress" style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent" android:layout_height="3dp" android:layout_marginTop="8dp"
+            android:indeterminate="true" android:visibility="gone" />
     </LinearLayout>
-</ScrollView>
+
+    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+        <ScrollView android:id="@+id/overviewScreen" android:layout_width="match_parent" android:layout_height="match_parent">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="vertical" android:padding="20dp">
+                <LinearLayout style="@style/Panel">
+                    <TextView style="@style/Eyebrow" android:text="TODAY" />
+                    <TextView android:id="@+id/todayValue" style="@style/HeroValue" android:text="—" />
+                    <TextView android:id="@+id/todayCaption" style="@style/Caption" android:text="Waiting for automatic update" />
+                </LinearLayout>
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="12dp">
+                    <LinearLayout style="@style/Panel" android:layout_width="0dp" android:layout_weight="1" android:layout_marginEnd="6dp">
+                        <TextView style="@style/Eyebrow" android:text="7-DAY AVERAGE" />
+                        <TextView android:id="@+id/weekAverage" style="@style/CardValue" android:text="—" />
+                    </LinearLayout>
+                    <LinearLayout style="@style/Panel" android:layout_width="0dp" android:layout_weight="1" android:layout_marginStart="6dp">
+                        <TextView style="@style/Eyebrow" android:text="TREND" />
+                        <TextView android:id="@+id/weekChange" style="@style/CardBody" android:text="Not enough data" />
+                    </LinearLayout>
+                </LinearLayout>
+                <LinearLayout style="@style/Panel" android:layout_marginTop="12dp">
+                    <TextView style="@style/SectionTitle" android:text="Last 7 days" />
+                    <com.adarsh.screentimearchive.TrendChartView android:id="@+id/weekChart"
+                        android:layout_width="match_parent" android:layout_height="210dp" />
+                </LinearLayout>
+            </LinearLayout>
+        </ScrollView>
+
+        <ScrollView android:id="@+id/historyScreen" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="vertical" android:padding="20dp">
+                <TextView style="@style/PageTitle" android:text="History" />
+                <TextView android:id="@+id/historySummary" style="@style/Caption" android:text="Your archive is updating" />
+                <LinearLayout style="@style/Panel" android:layout_marginTop="16dp">
+                    <TextView style="@style/Eyebrow" android:text="ESTIMATED ALL TIME" />
+                    <TextView android:id="@+id/lifetimeValue" style="@style/HeroValue" android:text="—" />
+                    <TextView android:id="@+id/lifetimeCaption" style="@style/Caption" />
+                </LinearLayout>
+                <LinearLayout style="@style/Panel" android:layout_marginTop="12dp">
+                    <TextView style="@style/SectionTitle" android:text="Last 30 days" />
+                    <com.adarsh.screentimearchive.TrendChartView android:id="@+id/historyChart"
+                        android:layout_width="match_parent" android:layout_height="210dp" />
+                </LinearLayout>
+                <TextView style="@style/SectionTitle" android:layout_marginTop="20dp" android:text="Recent days" />
+                <LinearLayout android:id="@+id/recentRows" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
+            </LinearLayout>
+        </ScrollView>
+
+        <ScrollView android:id="@+id/insightsScreen" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="vertical" android:padding="20dp">
+                <TextView style="@style/PageTitle" android:text="Insights" />
+                <TextView style="@style/Caption" android:text="Neutral patterns calculated from your private archive." />
+                <LinearLayout style="@style/Panel" android:layout_marginTop="16dp">
+                    <TextView style="@style/Eyebrow" android:text="HEAVIEST WEEKDAY" />
+                    <TextView android:id="@+id/insightWeekday" style="@style/CardValue" android:text="—" />
+                </LinearLayout>
+                <LinearLayout style="@style/Panel" android:layout_marginTop="12dp">
+                    <TextView style="@style/Eyebrow" android:text="HIGHEST RECORDED DAY" />
+                    <TextView android:id="@+id/insightHighest" style="@style/CardValue" android:text="—" />
+                </LinearLayout>
+                <LinearLayout style="@style/Panel" android:layout_marginTop="12dp">
+                    <TextView style="@style/Eyebrow" android:text="WEEKLY CHANGE" />
+                    <TextView android:id="@+id/insightTrend" style="@style/CardValue" android:text="—" />
+                </LinearLayout>
+                <LinearLayout style="@style/Panel" android:layout_marginTop="12dp">
+                    <TextView style="@style/Eyebrow" android:text="CURRENT STREAK" />
+                    <TextView android:id="@+id/insightStreak" style="@style/CardValue" android:text="—" />
+                </LinearLayout>
+            </LinearLayout>
+        </ScrollView>
+
+        <ScrollView android:id="@+id/dataScreen" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="vertical" android:padding="20dp">
+                <TextView style="@style/PageTitle" android:text="Data &amp; settings" />
+                <LinearLayout style="@style/Panel" android:layout_marginTop="16dp">
+                    <TextView android:id="@+id/permissionTitle" style="@style/SectionTitle" android:text="Usage access required" />
+                    <TextView android:id="@+id/permissionBody" style="@style/Caption" android:layout_marginTop="6dp" />
+                    <Button android:id="@+id/permissionButton" style="@style/PrimaryButton" android:text="Grant usage access" />
+                </LinearLayout>
+                <LinearLayout style="@style/Panel" android:layout_marginTop="12dp">
+                    <TextView style="@style/SectionTitle" android:text="Automatic archive" />
+                    <TextView android:id="@+id/archiveStatus" style="@style/Caption" android:layout_marginTop="6dp" android:text="Checking status…" />
+                    <TextView android:id="@+id/refreshStatus" style="@style/Caption" android:layout_marginTop="8dp" android:text="Waiting for permission" />
+                </LinearLayout>
+                <LinearLayout style="@style/Panel" android:layout_marginTop="12dp">
+                    <TextView style="@style/SectionTitle" android:text="First-use date" />
+                    <TextView style="@style/Caption" android:text="Used as the beginning of the historical estimate." />
+                    <Button android:id="@+id/dateButton" style="@style/SecondaryButton" android:text="1 Jan 2024" />
+                </LinearLayout>
+                <LinearLayout style="@style/Panel" android:layout_marginTop="12dp">
+                    <TextView style="@style/SectionTitle" android:text="Backup and transfer" />
+                    <TextView style="@style/Caption" android:text="Import adds missing daily rows and never overwrites records already stored." />
+                    <Button android:id="@+id/importButton" style="@style/PrimaryButton" android:text="Import CSV" />
+                    <Button android:id="@+id/exportButton" style="@style/SecondaryButton" android:text="Export CSV" android:enabled="false" />
+                </LinearLayout>
+            </LinearLayout>
+        </ScrollView>
+    </FrameLayout>
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="64dp" android:orientation="horizontal"
+        android:background="@color/surface" android:paddingStart="4dp" android:paddingEnd="4dp">
+        <Button android:id="@+id/overviewTab" style="@style/NavButton" android:text="Overview" />
+        <Button android:id="@+id/historyTab" style="@style/NavButton" android:text="History" />
+        <Button android:id="@+id/insightsTab" style="@style/NavButton" android:text="Insights" />
+        <Button android:id="@+id/dataTab" style="@style/NavButton" android:text="Data" />
+    </LinearLayout>
+</LinearLayout>

@@ -97,6 +97,32 @@ final class UsageRepository {
         }
     }
 
+    int importCsv(java.io.InputStream input) throws java.io.IOException {
+        java.io.BufferedReader reader = new java.io.BufferedReader(
+                new java.io.InputStreamReader(input, java.nio.charset.StandardCharsets.UTF_8));
+        int imported = 0;
+        String line;
+        while ((line = reader.readLine()) != null) {
+            String[] columns = line.split(",", -1);
+            if (columns.length < 4 || !"day".equalsIgnoreCase(columns[0].trim())) continue;
+            try {
+                LocalDate date = LocalDate.parse(columns[1].trim());
+                long minutes = Long.parseLong(columns[3].trim());
+                if (minutes >= 0 && minutes <= 24L * 60L
+                        && database.importDay(atStartOfDay(date), minutes * 60_000L)) {
+                    imported++;
+                }
+            } catch (RuntimeException ignored) {
+                // Skip malformed CSV rows while preserving all valid rows.
+            }
+        }
+        return imported;
+    }
+
+    int archivedDayCount() {
+        return database.getDayCount();
+    }
+
     private long queryFilteredAggregate(int interval, long start, long end) {
         if (usageStatsManager == null || end <= start) return 0L;
         List<UsageStats> stats = usageStatsManager.queryUsageStats(interval, start, end);
@@ -258,7 +284,7 @@ final class UsageRepository {
                         .append(date.format(iso)).append(',')
                         .append(date.plusDays(1).format(iso)).append(',')
                         .append(day.durationMs / 60_000L).append(',')
-                        .append("event-derived local archive").append('\n');
+                        .append(day.source).append('\n');
             }
             return csv.toString();
         }
