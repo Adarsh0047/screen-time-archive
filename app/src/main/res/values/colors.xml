@@ -1,0 +1,9 @@
+<resources>
+    <color name="background">#FFF9F2</color>
+    <color name="surface">#FFFFFFFF</color>
+    <color name="text_primary">#FF1D2733</color>
+    <color name="text_secondary">#FF5F6B76</color>
+    <color name="accent">#FF166A5D</color>
+    <color name="accent_soft">#FFDCEFEA</color>
+    <color name="warning">#FF9A5B13</color>
+</resources>
