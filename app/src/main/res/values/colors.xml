@@ -1,10 +1,10 @@
 <resources>
-    <color name="background">#FFF7F7FC</color>
+    <color name="background">#FFEAFBFF</color>
     <color name="surface">#FFFFFFFF</color>
     <color name="text_primary">#FF20212B</color>
     <color name="text_secondary">#FF6B6B78</color>
-    <color name="accent">#FF6558D3</color>
-    <color name="accent_soft">#FFEAE7FF</color>
-    <color name="chart_grid">#FFE2E1EA</color>
+    <color name="accent">#FF007F99</color>
+    <color name="accent_soft">#FFC8F5FC</color>
+    <color name="chart_grid">#FFBDE9F2</color>
     <color name="warning">#FF9A5B13</color>
 </resources>

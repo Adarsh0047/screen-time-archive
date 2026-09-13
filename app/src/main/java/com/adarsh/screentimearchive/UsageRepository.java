@@ -149,6 +149,7 @@ final class UsageRepository {
         if (events == null || !events.hasNextEvent()) return -1L;
 
         Set<String> activeActivities = new HashSet<>();
+        java.util.Map<String,Long> appTotals = new java.util.HashMap<>();
         UsageEvents.Event event = new UsageEvents.Event();
         long cursor = lookbackStart;
         long total = 0L;
@@ -158,6 +159,7 @@ final class UsageRepository {
             long timestamp = Math.max(cursor, Math.min(end, event.getTimeStamp()));
             if (!activeActivities.isEmpty()) {
                 total += overlapMillis(cursor, timestamp, start, end);
+                addAppTime(appTotals,activeActivities,overlapMillis(cursor,timestamp,start,end));
             }
 
             String packageName = event.getPackageName();
@@ -183,7 +185,9 @@ final class UsageRepository {
 
         if (!activeActivities.isEmpty()) {
             total += overlapMillis(cursor, end, start, end);
+            addAppTime(appTotals,activeActivities,overlapMillis(cursor,end,start,end));
         }
+        database.saveApps(start,appTotals);
         return Math.min(Math.max(0L, total), end - start);
     }
 
@@ -192,6 +196,12 @@ final class UsageRepository {
         long clippedStart = Math.max(intervalStart, windowStart);
         long clippedEnd = Math.min(intervalEnd, windowEnd);
         return Math.max(0L, clippedEnd - clippedStart);
+    }
+
+    private static void addAppTime(java.util.Map<String,Long> totals, Set<String> activities, long elapsed) {
+        Set<String> packages=new HashSet<>();
+        for(String activity:activities)packages.add(activity.substring(0,activity.indexOf('/')));
+        for(String pkg:packages)totals.put(pkg,totals.getOrDefault(pkg,0L)+elapsed);
     }
 
     private Set<String> findPackagesForCategory(String category) {

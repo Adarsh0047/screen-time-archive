@@ -67,8 +67,8 @@ public class MainActivity extends Activity {
     private void palette() {
         String mode=prefs.getString("theme","Dark");
         boolean dark=mode.equals("Dark") || (mode.equals("System") && (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES);
-        bg=Color.parseColor(dark?"#101119":"#F5F5FB"); surface=Color.parseColor(dark?"#1D1F2C":"#FFFFFF");
-        ink=Color.parseColor(dark?"#F3F2FA":"#202130"); muted=Color.parseColor(dark?"#A8AABC":"#646779"); accent=Color.parseColor(dark?"#B7ABFF":"#6555CD");
+        bg=Color.parseColor(dark?"#07171C":"#EAFBFF"); surface=Color.parseColor(dark?"#102B33":"#F8FEFF");
+        ink=Color.parseColor(dark?"#E5FAFF":"#083440"); muted=Color.parseColor(dark?"#9EC4CE":"#426A75"); accent=Color.parseColor(dark?"#40D9F4":"#007F99");
         getWindow().setStatusBarColor(bg); getWindow().setNavigationBarColor(bg);
         getWindow().getDecorView().setSystemUiVisibility(dark?0:View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
     }
@@ -146,13 +146,14 @@ public class MainActivity extends Activity {
             else for(UsageRepository.PeriodUsage p:result.years)if(range.equals("All time")||p.label.equals(""+anchor.getYear()))label(c,p.label+" · "+duration(p.durationMs)+" · estimate",17,true);
             c=card();label(c,"Daily archive by month",20,true);
             int year=anchor.getYear();
-            for(int m=1;m<=12;m++){LocalDate a=LocalDate.of(year,m,1);long n=sum(a,a.plusMonths(1));label(c,a.getMonth().toString()+" · "+duration(n)+" recorded",14,false);}
+            for(int m=1;m<=12;m++){LocalDate a=LocalDate.of(year,m,1);long n=sum(a,a.plusMonths(1));label(c,a.getMonth().toString()+" · "+(hasRecords(a,a.plusMonths(1))?duration(n)+" recorded":"No daily records"),14,false);}
             heatmap();return;
         }
         LocalDate a=range.equals("Day")?anchor:range.equals("Week")?anchor.minusDays(anchor.getDayOfWeek().getValue()-1):anchor.withDayOfMonth(1);
         LocalDate b=range.equals("Day")?a.plusDays(1):range.equals("Week")?a.plusWeeks(1):a.plusMonths(1);
         LinearLayout c=card(); label(c,date(a)+" — "+date(b.minusDays(1)),16,true);
-        label(c,duration(sum(a,b))+" recorded",28,true);label(c,"Only saved daily values are included; today is partial.",13,false);bars(c,a,b);
+        label(c,hasRecords(a,b)?duration(sum(a,b))+" recorded":"No daily records",28,true);label(c,"Only saved daily values are included; today is partial. Tap a day for app usage.",13,false);bars(c,a,b);
+        if(range.equals("Day"))c.addView(button("App usage for this day →",()->detail(anchor)));
         heatmap();
     }
     private void move(int n) { LocalDate next=range.equals("Day")?anchor.plusDays(n):range.equals("Week")?anchor.plusWeeks(n):range.equals("Month")?anchor.plusMonths(n):anchor.plusYears(n);if(!next.isAfter(LocalDate.now()))anchor=next;render(); }
@@ -179,7 +180,7 @@ public class MainActivity extends Activity {
                 if(day>0&&day<=total) {
                     LocalDate d=first.withDayOfMonth(day);boolean exists=days.containsKey(d);
                     cell.setText(day+(exists?"":"\n—")); cell.setTextColor(exists?Color.WHITE:muted);
-                    if(exists){int alpha=80+(int)Math.min(175,value(d)*175/(12L*3600000));cell.setBackground(shape(Color.argb(alpha,105,83,212)));}
+                    if(exists){int level=(int)Math.min(120,value(d)*120/(12L*3600000));cell.setBackground(shape(Color.rgb(0,150-level/2,180-level/2)));}
                     else cell.setBackground(shape(bg));
                     cell.setContentDescription(date(d)+": "+(exists?duration(value(d)):"no data"));cell.setOnClickListener(v->detail(d));
                 }
@@ -188,7 +189,25 @@ public class MainActivity extends Activity {
     }
     private void detail(LocalDate d) {
         HistoryDb.DayEntry entry=days.get(d);
-        new AlertDialog.Builder(this).setTitle(date(d)).setMessage(entry==null?"No daily record. This does not mean zero usage.":duration(entry.durationMs)+"\nSource: "+entry.source+(d.equals(LocalDate.now())?"\nToday is still in progress.":"")).setPositiveButton("Close",null).show();
+        worker.execute(()->{
+            StringBuilder info=new StringBuilder(entry==null?"No daily total recorded.":duration(entry.durationMs)+" total · "+entry.source);
+            try(HistoryDb db=new HistoryDb(this)){
+                Map<String,Long> apps=db.getApps(UsageRepository.atStartOfDay(d));
+                info.append("\n\nAPP USAGE\n");
+                if(apps.isEmpty())info.append("No per-app history saved for this day. Yearly totals and total-only CSV files cannot reconstruct it.");
+                for(Map.Entry<String,Long> app:apps.entrySet()){
+                    String name=app.getKey();
+                    try{name=getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(name,0)).toString();}catch(Exception ignored){}
+                    info.append("\n").append(name).append(" · ").append(duration(app.getValue()));
+                }
+                info.append("\n\nEvent-derived foreground usage. Simultaneous apps can overlap; their sum may exceed the daily total.");
+            }catch(Exception e){info.append("\nApp history could not be loaded.");}
+            runOnUiThread(()->{if(isDestroyed())return;ScrollView scroll=new ScrollView(this);TextView content=text(info.toString(),16,false);content.setPadding(dp(20),dp(16),dp(20),dp(16));scroll.addView(content);scroll.setBackgroundColor(surface);new AlertDialog.Builder(this).setTitle(date(d)).setView(scroll).setPositiveButton("Close",null).show();});
+        });
+    }
+    private boolean hasRecords(LocalDate a,LocalDate b) {
+        for(LocalDate d:days.keySet())if(!d.isBefore(a)&&d.isBefore(b))return true;
+        return false;
     }
     private void insights() {
         LinearLayout c=card();label(c,"Weekly change",19,true);label(c,trend(),18,false);
