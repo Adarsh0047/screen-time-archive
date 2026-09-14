@@ -17,19 +17,19 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="DAYTRACE"
-            android:textColor="#FF40D9F4"
+            android:textColor="@color/widget_accent"
             android:textSize="13sp"
             android:textStyle="bold" />
-        <TextView
+        <ImageButton
             android:id="@+id/widget_refresh"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
             android:background="@drawable/widget_refresh_background"
-            android:gravity="center"
-            android:text="↻"
-            android:textColor="#FFBDF5FF"
-            android:textSize="25sp"
-            android:contentDescription="Refresh Daytrace" />
+            android:contentDescription="@string/widget_refresh"
+            android:padding="9dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_widget_refresh"
+            />
     </LinearLayout>
 
     <TextView
@@ -38,7 +38,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="1dp"
         android:text="No data yet"
-        android:textColor="#FFFFFFFF"
+        android:textColor="@color/widget_primary"
         android:textSize="34sp"
         android:textStyle="bold" />
 
@@ -50,8 +50,8 @@
         android:layout_marginTop="8dp"
         android:max="100"
         android:progress="0"
-        android:progressBackgroundTint="#FF1A505D"
-        android:progressTint="#FF40D9F4" />
+        android:progressBackgroundTint="@color/widget_track"
+        android:progressTint="@color/widget_accent" />
 
     <TextView
         android:id="@+id/widget_target"
@@ -59,26 +59,28 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
         android:text="0% of 6h 0m"
-        android:textColor="#FF9EDCE8"
+        android:textColor="@color/widget_secondary"
         android:textSize="12sp" />
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_marginTop="10dp"
-        android:layout_weight="1"
-        android:gravity="center_vertical"
+        android:id="@+id/widget_apps"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
         android:orientation="vertical">
         <TextView android:id="@+id/widget_app_1" style="@style/WidgetAppRow" />
         <TextView android:id="@+id/widget_app_2" style="@style/WidgetAppRow" />
         <TextView android:id="@+id/widget_app_3" style="@style/WidgetAppRow" />
+        <TextView android:id="@+id/widget_app_4" style="@style/WidgetAppRow" />
+        <TextView android:id="@+id/widget_app_5" style="@style/WidgetAppRow" />
     </LinearLayout>
 
     <TextView
         android:id="@+id/widget_status"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
         android:text="● Never synced"
-        android:textColor="#FF8CCAD6"
+        android:textColor="@color/widget_secondary"
         android:textSize="11sp" />
 </LinearLayout>

@@ -6,8 +6,9 @@ import android.appwidget.AppWidgetProvider;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.content.pm.ApplicationInfo;
-import android.os.SystemClock;
+import android.os.Bundle;
 import android.text.format.DateUtils;
 import android.view.View;
 import android.widget.RemoteViews;
@@ -27,10 +28,19 @@ public class DaytraceWidget extends AppWidgetProvider {
         refreshAsync(context, manager, ids, true, goAsync());
     }
 
+    @Override public void onAppWidgetOptionsChanged(Context context,
+                                                     AppWidgetManager manager,
+                                                     int widgetId,
+                                                     Bundle newOptions) {
+        manager.updateAppWidget(widgetId, build(context, widgetId));
+    }
+
     @Override public void onReceive(Context context, Intent intent) {
         super.onReceive(context, intent);
         String action = intent.getAction();
-        if (!ACTION_REFRESH.equals(action) && !ACTION_DATA_CHANGED.equals(action)) return;
+        boolean configurationChanged = Intent.ACTION_CONFIGURATION_CHANGED.equals(action);
+        if (!ACTION_REFRESH.equals(action) && !ACTION_DATA_CHANGED.equals(action)
+                && !configurationChanged) return;
         AppWidgetManager manager = AppWidgetManager.getInstance(context);
         int[] ids = manager.getAppWidgetIds(new ComponentName(context, DaytraceWidget.class));
         refreshAsync(context, manager, ids, ACTION_REFRESH.equals(action), goAsync());
@@ -51,18 +61,35 @@ public class DaytraceWidget extends AppWidgetProvider {
                 if (collect && UsagePermission.isGranted(app)) {
                     new UsageRepository(app).archiveCurrentDays();
                 }
-                for (int id : ids) manager.updateAppWidget(id, build(app));
+                for (int id : ids) manager.updateAppWidget(id, build(app, id));
             } catch (Exception error) {
                 ArchiveHealth.recordFailure(app, error);
-                for (int id : ids) manager.updateAppWidget(id, build(app));
+                for (int id : ids) manager.updateAppWidget(id, build(app, id));
             } finally {
                 pendingResult.finish();
             }
         }, "daytrace-widget").start();
     }
 
-    private static RemoteViews build(Context context) {
+    private static RemoteViews build(Context context, int widgetId) {
         RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.daytrace_widget);
+        Bundle options = AppWidgetManager.getInstance(context).getAppWidgetOptions(widgetId);
+        boolean portrait = context.getResources().getConfiguration().orientation
+                == Configuration.ORIENTATION_PORTRAIT;
+        int height = options.getInt(portrait
+                ? AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT
+                : AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 220);
+        int width = options.getInt(portrait
+                ? AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH
+                : AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, 180);
+        if (height <= 0) height = 220;
+        if (width <= 0) width = 180;
+        int visibleApps = height < 175 ? 0 : height < 205 ? 1
+                : height < 235 ? 2 : height < 270 ? 3 : height < 305 ? 4 : 5;
+        views.setTextViewTextSize(R.id.widget_time,
+                android.util.TypedValue.COMPLEX_UNIT_SP, width < 175 ? 29f : 34f);
+        views.setViewVisibility(R.id.widget_apps,
+                visibleApps == 0 ? View.GONE : View.VISIBLE);
         long dayStart = UsageRepository.atStartOfDay(LocalDate.now());
         HistoryDb.DayEntry today;
         Map<String, Long> apps;
@@ -90,9 +117,11 @@ public class DaytraceWidget extends AppWidgetProvider {
                 (ArchiveHealth.isStale(context) ? "● Needs sync · " : "● Healthy · ") + update);
 
         List<Map.Entry<String, Long>> top = new ArrayList<>(apps.entrySet());
-        bindApp(context, views, top, 0, R.id.widget_app_1);
-        bindApp(context, views, top, 1, R.id.widget_app_2);
-        bindApp(context, views, top, 2, R.id.widget_app_3);
+        int[] rowIds = {R.id.widget_app_1, R.id.widget_app_2, R.id.widget_app_3,
+                R.id.widget_app_4, R.id.widget_app_5};
+        for (int index = 0; index < rowIds.length; index++) {
+            bindApp(context, views, top, index, rowIds[index], visibleApps);
+        }
 
         Intent open = new Intent(context, MainActivity.class);
         views.setOnClickPendingIntent(R.id.widget_root, PendingIntent.getActivity(
@@ -105,7 +134,11 @@ public class DaytraceWidget extends AppWidgetProvider {
 
     private static void bindApp(Context context, RemoteViews views,
                                 List<Map.Entry<String, Long>> apps,
-                                int index, int viewId) {
+                                int index, int viewId, int visibleApps) {
+        if (index >= visibleApps) {
+            views.setViewVisibility(viewId, View.GONE);
+            return;
+        }
         if (index >= apps.size()) {
             views.setViewVisibility(viewId, index == 0 ? View.VISIBLE : View.GONE);
             if (index == 0) views.setTextViewText(viewId, "App details will appear after sync");
@@ -120,6 +153,12 @@ public class DaytraceWidget extends AppWidgetProvider {
         } catch (Exception ignored) {}
         views.setViewVisibility(viewId, View.VISIBLE);
         views.setTextViewText(viewId,
-                (index + 1) + "  " + name + "  ·  " + UsageRepository.formatDuration(app.getValue()));
+                (index + 1) + "  " + name + "  ·  " + compactDuration(app.getValue()));
+    }
+
+    private static String compactDuration(long millis) {
+        long minutes = Math.max(0L, millis) / 60_000L;
+        if (minutes < 60L) return minutes + "m";
+        return minutes / 60L + "h " + minutes % 60L + "m";
     }
 }
