@@ -123,6 +123,9 @@ public class MainActivity extends Activity {
         b.setBackground(shape(selected?accent:tonal));
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-2,dp(42)); lp.setMargins(dp(3),dp(2),dp(3),dp(2)); b.setLayoutParams(lp); return b;
     }
+    private void addAction(LinearLayout parent,Button button) {
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(48)); lp.topMargin=dp(10); parent.addView(button,lp);
+    }
     private LinearLayout card() {
         LinearLayout c=new LinearLayout(this); c.setOrientation(1); c.setPadding(dp(16),dp(14),dp(16),dp(14)); c.setBackground(shape(surface));
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2); lp.topMargin=dp(14); body.addView(c,lp); return c;
@@ -152,13 +155,21 @@ public class MainActivity extends Activity {
         d.getDatePicker().setMaxDate(System.currentTimeMillis());d.show();
     }
     private void history() {
-        HorizontalScrollView filters=new HorizontalScrollView(this);filters.setHorizontalScrollBarEnabled(false);LinearLayout choices=new LinearLayout(this);
-        for(String r:new String[]{"Day","Week","Month","Year","All time"}) choices.addView(chip(r,r.equals(range),()->{range=r;render();}));
-        filters.addView(choices);body.addView(filters);
-        LinearLayout controls=new LinearLayout(this);
-        controls.addView(button("‹",()->move(-1)));
-        Button selected=button(date(anchor),()->choose(d->{anchor=d;render();}));controls.addView(selected,new LinearLayout.LayoutParams(0,-2,1));
-        controls.addView(button("›",()->move(1)));body.addView(controls);
+        LinearLayout choices=new LinearLayout(this); choices.setPadding(0,dp(6),0,dp(6));
+        String[] ranges={"Day","Week","Month","Year","All time"};
+        String[] rangeLabels={"Day","Week","Month","Year","All"};
+        for(int i=0;i<ranges.length;i++) {
+            final String selectedRange=ranges[i]; Button b=chip(rangeLabels[i],selectedRange.equals(range),()->{range=selectedRange;render();});
+            b.setTextSize(12); b.setMinWidth(0); b.setPadding(dp(2),0,dp(2),0);
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(44),1); lp.setMargins(dp(3),0,dp(3),0); choices.addView(b,lp);
+        }
+        body.addView(choices,new LinearLayout.LayoutParams(-1,-2));
+        LinearLayout controls=new LinearLayout(this); controls.setPadding(dp(3),0,dp(3),dp(4));
+        Button previous=button("‹",()->move(-1)); previous.setTextSize(22); previous.setContentDescription("Previous "+range.toLowerCase());
+        LinearLayout.LayoutParams edge=new LinearLayout.LayoutParams(dp(64),dp(48)); edge.setMargins(0,0,dp(8),0); controls.addView(previous,edge);
+        Button selected=button(date(anchor),()->choose(d->{anchor=d;render();})); controls.addView(selected,new LinearLayout.LayoutParams(0,dp(48),1));
+        Button next=button("›",()->move(1)); next.setTextSize(22); next.setContentDescription("Next "+range.toLowerCase());
+        LinearLayout.LayoutParams right=new LinearLayout.LayoutParams(dp(64),dp(48)); right.setMargins(dp(8),0,0,0); controls.addView(next,right); body.addView(controls);
         if(range.equals("Year")||range.equals("All time")) {
             LinearLayout c=card();label(c,"Estimated history",20,true);
             label(c,"Android summaries can be incomplete and cannot be converted into daily history.",14,false);
@@ -172,9 +183,15 @@ public class MainActivity extends Activity {
         LocalDate a=range.equals("Day")?anchor:range.equals("Week")?anchor.minusDays(anchor.getDayOfWeek().getValue()-1):anchor.withDayOfMonth(1);
         LocalDate b=range.equals("Day")?a.plusDays(1):range.equals("Week")?a.plusWeeks(1):a.plusMonths(1);
         LinearLayout c=card(); label(c,date(a)+" — "+date(b.minusDays(1)),16,true);
-        label(c,hasRecords(a,b)?duration(sum(a,b))+" recorded":"No daily records",28,true);label(c,"Only saved daily values are included; today is partial. Tap a day for app usage.",13,false);bars(c,a,b);
-        if(range.equals("Day"))c.addView(button("App usage for this day →",()->detail(anchor)));
-        heatmap();
+        label(c,hasRecords(a,b)?duration(sum(a,b))+" recorded":"No daily records",28,true);label(c,"Only saved daily values are included; today is partial.",13,false);
+        if(range.equals("Month")) {
+            heatmap();
+            c=card(); label(c,"Daily breakdown",19,true); label(c,"Tap any recorded day to see its app usage.",13,false); bars(c,a,b);
+        } else {
+            bars(c,a,b);
+            if(range.equals("Day")) addAction(c,button("App usage for this day →",()->detail(anchor)));
+            heatmap();
+        }
     }
     private void move(int n) { LocalDate next=range.equals("Day")?anchor.plusDays(n):range.equals("Week")?anchor.plusWeeks(n):range.equals("Month")?anchor.plusMonths(n):anchor.plusYears(n);if(!next.isAfter(LocalDate.now()))anchor=next;render(); }
     private void bars(LinearLayout c,LocalDate a,LocalDate b) {
@@ -251,10 +268,10 @@ public class MainActivity extends Activity {
         LinearLayout c=card();label(c,"Archive health",20,true);label(c,ArchiveHealth.summary(this),14,false);label(c,days.size()+" daily records",24,true);
         label(c,"Background job: "+(ArchiveScheduler.isScheduled(this)?"scheduled":"not scheduled"),14,false);
         label(c,"Older Android summaries are estimates, not complete daily records. Export before uninstalling.",14,false);
-        c.addView(button("Import CSV",()->startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*"),1002)));
-        c.addView(button("Export CSV",()->{if(result==null){Toast.makeText(this,"Usage access and a successful update are needed to export",1).show();return;}startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("text/csv").putExtra(Intent.EXTRA_TITLE,"screen-time-history.csv"),1001);}));
+        addAction(c,button("Import CSV",()->startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*"),1002)));
+        addAction(c,button("Export CSV",()->{if(result==null){Toast.makeText(this,"Usage access and a successful update are needed to export",1).show();return;}startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("text/csv").putExtra(Intent.EXTRA_TITLE,"screen-time-history.csv"),1001);}));
         label(c,"Import currently adds missing daily rows only; existing records are preserved.",13,false);
-        c.addView(button("Settings →",()->{page="Settings";render();}));
+        addAction(c,button("Settings →",()->{page="Settings";render();}));
     }
     @Override protected void onActivityResult(int request,int code,Intent data) {
         super.onActivityResult(request,code,data);if(code!=RESULT_OK||data==null||data.getData()==null)return;
