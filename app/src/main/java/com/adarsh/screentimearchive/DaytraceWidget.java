@@ -119,8 +119,13 @@ public class DaytraceWidget extends AppWidgetProvider {
         List<Map.Entry<String, Long>> top = new ArrayList<>(apps.entrySet());
         int[] rowIds = {R.id.widget_app_1, R.id.widget_app_2, R.id.widget_app_3,
                 R.id.widget_app_4, R.id.widget_app_5};
+        int[] nameIds = {R.id.widget_app_name_1, R.id.widget_app_name_2,
+                R.id.widget_app_name_3, R.id.widget_app_name_4, R.id.widget_app_name_5};
+        int[] timeIds = {R.id.widget_app_time_1, R.id.widget_app_time_2,
+                R.id.widget_app_time_3, R.id.widget_app_time_4, R.id.widget_app_time_5};
         for (int index = 0; index < rowIds.length; index++) {
-            bindApp(context, views, top, index, rowIds[index], visibleApps);
+            bindApp(context, views, top, index, rowIds[index], nameIds[index],
+                    timeIds[index], visibleApps);
         }
 
         Intent open = new Intent(context, MainActivity.class);
@@ -134,14 +139,18 @@ public class DaytraceWidget extends AppWidgetProvider {
 
     private static void bindApp(Context context, RemoteViews views,
                                 List<Map.Entry<String, Long>> apps,
-                                int index, int viewId, int visibleApps) {
+                                int index, int rowId, int nameId, int timeId,
+                                int visibleApps) {
         if (index >= visibleApps) {
-            views.setViewVisibility(viewId, View.GONE);
+            views.setViewVisibility(rowId, View.GONE);
             return;
         }
         if (index >= apps.size()) {
-            views.setViewVisibility(viewId, index == 0 ? View.VISIBLE : View.GONE);
-            if (index == 0) views.setTextViewText(viewId, "App details will appear after sync");
+            views.setViewVisibility(rowId, index == 0 ? View.VISIBLE : View.GONE);
+            if (index == 0) {
+                views.setTextViewText(nameId, "App details appear after sync");
+                views.setTextViewText(timeId, "");
+            }
             return;
         }
         Map.Entry<String, Long> app = apps.get(index);
@@ -151,9 +160,9 @@ public class DaytraceWidget extends AppWidgetProvider {
                     .getApplicationInfo(name, 0);
             name = context.getPackageManager().getApplicationLabel(info).toString();
         } catch (Exception ignored) {}
-        views.setViewVisibility(viewId, View.VISIBLE);
-        views.setTextViewText(viewId,
-                (index + 1) + "  " + name + "  ·  " + compactDuration(app.getValue()));
+        views.setViewVisibility(rowId, View.VISIBLE);
+        views.setTextViewText(nameId, (index + 1) + "  " + name);
+        views.setTextViewText(timeId, compactDuration(app.getValue()));
     }
 
     private static String compactDuration(long millis) {

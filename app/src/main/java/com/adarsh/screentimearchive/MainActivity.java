@@ -6,6 +6,7 @@ import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Settings;
@@ -26,7 +27,7 @@ public class MainActivity extends Activity {
     private String page = "Overview", range = "Month";
     private LocalDate anchor = LocalDate.now();
     private boolean busy;
-    private int bg, surface, ink, muted, accent;
+    private int bg, surface, tonal, ink, muted, accent;
     private SharedPreferences prefs;
     private String status = "Loading saved archive…";
     private long start;
@@ -69,6 +70,7 @@ public class MainActivity extends Activity {
         String mode=prefs.getString("theme","Dark");
         boolean dark=mode.equals("Dark") || (mode.equals("System") && (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES);
         bg=Color.parseColor(dark?"#07171C":"#EAFBFF"); surface=Color.parseColor(dark?"#102B33":"#F8FEFF");
+        tonal=Color.parseColor(dark?"#163F49":"#C8F2FA");
         ink=Color.parseColor(dark?"#E5FAFF":"#083440"); muted=Color.parseColor(dark?"#9EC4CE":"#426A75"); accent=Color.parseColor(dark?"#40D9F4":"#007F99");
         getWindow().setStatusBarColor(bg); getWindow().setNavigationBarColor(bg);
         getWindow().getDecorView().setSystemUiVisibility(dark?0:View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
@@ -79,18 +81,27 @@ public class MainActivity extends Activity {
         // Consume system insets explicitly, including Android 15 edge-to-edge.
         root.setOnApplyWindowInsetsListener((v,i)->{ v.setPadding(i.getSystemWindowInsetLeft(),i.getSystemWindowInsetTop(),i.getSystemWindowInsetRight(),i.getSystemWindowInsetBottom()); return i.consumeSystemWindowInsets(); });
         setContentView(root); root.requestApplyInsets();
-        LinearLayout header=new LinearLayout(this); header.setGravity(Gravity.CENTER_VERTICAL); header.setPadding(dp(20),dp(12),dp(12),dp(6));
-        TextView title=text("Daytrace",22,true); header.addView(title,new LinearLayout.LayoutParams(0,-2,1));
+        LinearLayout header=new LinearLayout(this); header.setGravity(Gravity.CENTER_VERTICAL); header.setPadding(dp(20),dp(14),dp(16),dp(8));
+        TextView title=text("Daytrace",24,true); header.addView(title,new LinearLayout.LayoutParams(0,-2,1));
         Button settings=button("Settings",()->{page="Settings";render();}); header.addView(settings); root.addView(header);
+        addLeadingIcon(settings,R.drawable.ic_settings,accent);
         ScrollView scroll=new ScrollView(this); scroll.setFillViewport(true); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         body=new LinearLayout(this); body.setOrientation(1); body.setPadding(dp(20),dp(12),dp(20),dp(28)); scroll.addView(body);
-        label(body,page,30,true);
+        label(body,pageTitle(page),30,true);
         if (!UsagePermission.isGranted(this)) { LinearLayout c=card(); label(c,"Enable automatic archiving",19,true); label(c,"Grant Usage Access once. No manual scan is required.",14,false); c.addView(button("Grant Usage Access",()->startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)))); }
         switch(page) { case "History": history();break; case "Insights": insights();break; case "Settings": settings();break; case "Data": data();break; default: overview(); }
-        LinearLayout nav=new LinearLayout(this); nav.setBackgroundColor(surface);
-        for(String p:new String[]{"Overview","History","Insights","Data"}) {
-            Button b=button(p,()->{page=p;render();}); b.setTextSize(12); b.setTextColor(page.equals(p)?accent:muted); b.setMinWidth(0); b.setPadding(0,dp(8),0,dp(8));
-            nav.addView(b,new LinearLayout.LayoutParams(0,dp(58),1));
+        LinearLayout nav=new LinearLayout(this); nav.setBackgroundColor(surface); nav.setPadding(dp(6),dp(3),dp(6),dp(3));
+        String[] pages={"Overview","History","Insights","Data"};
+        String[] labels={"Today","History","Insights","Archive"};
+        int[] icons={R.drawable.ic_today,R.drawable.ic_history,R.drawable.ic_insights,R.drawable.ic_archive};
+        for(int i=0;i<pages.length;i++) {
+            final String destination=pages[i];
+            Button b=button(labels[i],()->{page=destination;render();});
+            int color=page.equals(destination)?accent:muted;
+            b.setTextSize(11); b.setTextColor(color); b.setMinWidth(0); b.setPadding(0,dp(4),0,dp(3));
+            b.setGravity(Gravity.CENTER); b.setBackgroundColor(Color.TRANSPARENT);
+            Drawable icon=icon(icons[i],color); b.setCompoundDrawables(null,icon,null,null); b.setCompoundDrawablePadding(dp(2));
+            nav.addView(b,new LinearLayout.LayoutParams(0,dp(64),1));
         }
         root.addView(nav);
     }
@@ -101,9 +112,17 @@ public class MainActivity extends Activity {
     private void label(LinearLayout p,String s,int size,boolean bold) { TextView t=text(s,size,bold); t.setPadding(0,dp(4),0,dp(6)); p.addView(t); }
     private Button button(String s,Runnable action) {
         Button b=new Button(this); b.setText(s); b.setTextSize(14); b.setTextColor(accent); b.setAllCaps(false); b.setMinHeight(dp(48));
-        b.setBackgroundColor(Color.TRANSPARENT); b.setOnClickListener(v->action.run()); return b;
+        b.setBackground(shape(tonal)); b.setPadding(dp(16),0,dp(16),0); b.setOnClickListener(v->action.run()); return b;
     }
-    private GradientDrawable shape(int color) { GradientDrawable d=new GradientDrawable(); d.setColor(color); d.setCornerRadius(dp(18)); return d; }
+    private String pageTitle(String value) { return value.equals("Overview")?"Today":value.equals("Data")?"Archive":value; }
+    private Drawable icon(int resource,int color) { Drawable d=getDrawable(resource).mutate(); d.setTint(color); d.setBounds(0,0,dp(22),dp(22)); return d; }
+    private void addLeadingIcon(Button button,int resource,int color) { button.setCompoundDrawables(icon(resource,color),null,null,null); button.setCompoundDrawablePadding(dp(7)); }
+    private GradientDrawable shape(int color) { GradientDrawable d=new GradientDrawable(); d.setColor(color); d.setCornerRadius(dp(24)); return d; }
+    private Button chip(String title,boolean selected,Runnable action) {
+        Button b=button(title,action); b.setMinHeight(dp(42)); b.setTextColor(selected?bg:ink);
+        b.setBackground(shape(selected?accent:tonal));
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-2,dp(42)); lp.setMargins(dp(3),dp(2),dp(3),dp(2)); b.setLayoutParams(lp); return b;
+    }
     private LinearLayout card() {
         LinearLayout c=new LinearLayout(this); c.setOrientation(1); c.setPadding(dp(16),dp(14),dp(16),dp(14)); c.setBackground(shape(surface));
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2); lp.topMargin=dp(14); body.addView(c,lp); return c;
@@ -124,7 +143,7 @@ public class MainActivity extends Activity {
         c=card();label(c,"Last 7 completed days",18,true);
         label(c,complete(t.minusDays(7),t)?duration(sum(t.minusDays(7),t)/7)+" / day":"Incomplete week",25,true);
         label(c,trend(),14,false); bars(c,t.minusDays(7),t);
-        c=card();label(c,"Your archive",18,true);label(c,days.size()+" daily records · stored on this phone",14,false);
+        c=card();label(c,"Archive status",18,true);label(c,days.size()+" daily records · stored privately on this phone",14,false);
         label(c,"Historical summaries are estimates. Missing days are not zero-use days.",14,false);
         c.addView(button("Explore history →",()->{page="History";render();}));
     }
@@ -134,18 +153,18 @@ public class MainActivity extends Activity {
     }
     private void history() {
         HorizontalScrollView filters=new HorizontalScrollView(this);filters.setHorizontalScrollBarEnabled(false);LinearLayout choices=new LinearLayout(this);
-        for(String r:new String[]{"Day","Week","Month","Year","All time"}) { Button b=button(r,()->{range=r;render();}); if(r.equals(range))b.setBackground(shape(surface));choices.addView(b); }
+        for(String r:new String[]{"Day","Week","Month","Year","All time"}) choices.addView(chip(r,r.equals(range),()->{range=r;render();}));
         filters.addView(choices);body.addView(filters);
         LinearLayout controls=new LinearLayout(this);
         controls.addView(button("‹",()->move(-1)));
         Button selected=button(date(anchor),()->choose(d->{anchor=d;render();}));controls.addView(selected,new LinearLayout.LayoutParams(0,-2,1));
         controls.addView(button("›",()->move(1)));body.addView(controls);
         if(range.equals("Year")||range.equals("All time")) {
-            LinearLayout c=card();label(c,"Historical aggregate estimates",20,true);
+            LinearLayout c=card();label(c,"Estimated history",20,true);
             label(c,"Android summaries can be incomplete and cannot be converted into daily history.",14,false);
             if(result==null)label(c,"Grant Usage Access to load retained summaries.",14,false);
             else for(UsageRepository.PeriodUsage p:result.years)if(range.equals("All time")||p.label.equals(""+anchor.getYear()))label(c,p.label+" · "+duration(p.durationMs)+" · estimate",17,true);
-            c=card();label(c,"Daily archive by month",20,true);
+            c=card();label(c,"Recorded months",20,true);
             int year=anchor.getYear();
             for(int m=1;m<=12;m++){LocalDate a=LocalDate.of(year,m,1);long n=sum(a,a.plusMonths(1));label(c,a.getMonth().toString()+" · "+(hasRecords(a,a.plusMonths(1))?duration(n)+" recorded":"No daily records"),14,false);}
             heatmap();return;
