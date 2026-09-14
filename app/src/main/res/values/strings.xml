@@ -8,4 +8,5 @@
     <string name="scan_history">Update history</string>
     <string name="export_csv">Export CSV</string>
     <string name="not_scanned">History updates automatically after usage access is granted.</string>
+    <string name="widget_description">Today’s screen time, target progress, top apps and archive health</string>
 </resources>

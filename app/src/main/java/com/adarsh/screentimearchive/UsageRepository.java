@@ -85,16 +85,43 @@ final class UsageRepository {
                 oldestAvailable, years, months, archivedDays);
     }
 
-    void archiveRecentDays() {
+    ArchiveReport archiveRecentDays() {
+        return archiveDays(DAILY_BACKFILL_DAYS);
+    }
+
+    ArchiveReport archiveCurrentDays() {
+        return archiveDays(2);
+    }
+
+    private ArchiveReport archiveDays(int dayCount) {
+        ArchiveHealth.recordAttempt(context);
         ZoneId zone = ZoneId.systemDefault();
         LocalDate today = LocalDate.now(zone);
-        for (int offset = DAILY_BACKFILL_DAYS - 1; offset >= 0; offset--) {
+        int saved = 0;
+        int protectedDays = 0;
+        int unavailable = 0;
+        for (int offset = dayCount - 1; offset >= 0; offset--) {
             LocalDate day = today.minusDays(offset);
             long start = atStartOfDay(day);
             long end = offset == 0 ? System.currentTimeMillis() : atStartOfDay(day.plusDays(1));
-            long duration = queryEventDerivedScreenTime(start, end);
-            if (duration >= 0L) database.upsert(start, duration);
+            DailySnapshot snapshot = queryEventDerivedScreenTime(start, end);
+            if (snapshot == null) {
+                unavailable++;
+            } else if (database.saveSnapshotIfNotLower(
+                    start, snapshot.durationMs, snapshot.appTotals)) {
+                saved++;
+            } else {
+                protectedDays++;
+            }
         }
+        ArchiveReport report = new ArchiveReport(saved, protectedDays, unavailable);
+        if (saved + protectedDays > 0) {
+            ArchiveHealth.recordSuccess(context, report);
+        } else {
+            ArchiveHealth.recordFailure(context, new IllegalStateException(
+                    "Android returned no detailed usage events"));
+        }
+        return report;
     }
 
     int importCsv(java.io.InputStream input) throws java.io.IOException {
@@ -142,11 +169,11 @@ final class UsageRepository {
      * so split-screen activities and duplicate OEM lifecycle events cannot make
      * a day longer than the elapsed wall-clock period.
      */
-    private long queryEventDerivedScreenTime(long start, long end) {
-        if (usageStatsManager == null || end <= start) return -1L;
+    private DailySnapshot queryEventDerivedScreenTime(long start, long end) {
+        if (usageStatsManager == null || end <= start) return null;
         long lookbackStart = Math.max(0L, start - 24L * 60L * 60L * 1000L);
         UsageEvents events = usageStatsManager.queryEvents(lookbackStart, end);
-        if (events == null || !events.hasNextEvent()) return -1L;
+        if (events == null || !events.hasNextEvent()) return null;
 
         Set<String> activeActivities = new HashSet<>();
         java.util.Map<String,Long> appTotals = new java.util.HashMap<>();
@@ -187,8 +214,7 @@ final class UsageRepository {
             total += overlapMillis(cursor, end, start, end);
             addAppTime(appTotals,activeActivities,overlapMillis(cursor,end,start,end));
         }
-        database.saveApps(start,appTotals);
-        return Math.min(Math.max(0L, total), end - start);
+        return new DailySnapshot(Math.min(Math.max(0L, total), end - start), appTotals);
     }
 
     private static long overlapMillis(long intervalStart, long intervalEnd,
@@ -215,6 +241,28 @@ final class UsageRepository {
             }
         }
         return packages;
+    }
+
+    static final class ArchiveReport {
+        final int savedDays;
+        final int protectedDays;
+        final int unavailableDays;
+
+        ArchiveReport(int savedDays, int protectedDays, int unavailableDays) {
+            this.savedDays = savedDays;
+            this.protectedDays = protectedDays;
+            this.unavailableDays = unavailableDays;
+        }
+    }
+
+    private static final class DailySnapshot {
+        final long durationMs;
+        final java.util.Map<String, Long> appTotals;
+
+        DailySnapshot(long durationMs, java.util.Map<String, Long> appTotals) {
+            this.durationMs = durationMs;
+            this.appTotals = appTotals;
+        }
     }
 
     static long atStartOfDay(LocalDate date) {

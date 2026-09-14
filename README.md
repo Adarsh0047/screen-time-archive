@@ -50,6 +50,8 @@ APK you built from source you control.
 - Thirty-day history chart and recent daily values
 - Weekday, peak-day, trend, and under-six-hour streak insights
 - Automatic daily collection with ten-day catch-up and boot persistence
+- Six-hour background checks, retry tracking, gap detection, and monotonic saves
+- Cyan home-screen widget with today, target progress, top apps, and sync health
 - Duplicate-safe CSV import plus CSV export
 - Four-tab Material-style interface; no network permission or analytics
 
@@ -62,6 +64,10 @@ APK you built from source you control.
 
 Keep usage access enabled. Android may defer exact background timing under battery
 optimization, so every app launch also performs a safe automatic catch-up.
+
+Add the widget by long-pressing the home screen, opening **Widgets**, choosing
+**Daytrace**, and dragging it into place. Its refresh button performs a lightweight
+two-day catch-up. The status line tells you when collection is stale.
 
 ## Technical notes
 

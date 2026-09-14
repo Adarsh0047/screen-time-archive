@@ -59,9 +59,10 @@ public class MainActivity extends Activity {
                     result = updated; days.clear();
                     for (HistoryDb.DayEntry d : saved) days.put(Instant.ofEpochMilli(d.dayStart).atZone(ZoneId.systemDefault()).toLocalDate(),d);
                     busy = false; status = updated == null ? "Usage access needed for automatic collection" : "Updated " + java.time.LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"));
+                    DaytraceWidget.requestUpdate(this);
                     render();
                 });
-            } catch (Exception e) { runOnUiThread(() -> { busy=false; status="Update unavailable. Saved records are kept."; if (!isDestroyed()) render(); }); }
+            } catch (Exception e) { ArchiveHealth.recordFailure(this, e); runOnUiThread(() -> { busy=false; status="Update unavailable. Saved records are kept."; if (!isDestroyed()) render(); }); }
         });
     }
     private void palette() {
@@ -224,11 +225,11 @@ public class MainActivity extends Activity {
         c=card();label(c,"Daily target",20,true);label(c,duration(prefs.getInt("target",360)*60000L),23,true);
         c.addView(button("Change target",()->{EditText input=new EditText(this);input.setInputType(2);input.setText(""+prefs.getInt("target",360));new AlertDialog.Builder(this).setTitle("Target in minutes (1–1440)").setView(input).setPositiveButton("Save",(d,w)->{try{int v=Integer.parseInt(input.getText().toString());if(v<1||v>1440)throw new Exception();prefs.edit().putInt("target",v).apply();render();}catch(Exception e){Toast.makeText(this,"Enter 1–1440 minutes",1).show();}}).setNegativeButton("Cancel",null).show();}));
         c=card();label(c,"History start date",20,true);c.addView(button(UsageRepository.formatDate(start),()->choose(d->{start=UsageRepository.atStartOfDay(d);prefs.edit().putLong("purchase_date",start).apply();refresh();})));
-        c=card();label(c,"Automatic archiving",20,true);label(c,"Runs daily in the background and catches up when opened. Android can delay jobs; force-stop suspends them until the app is reopened.",14,false);
+        c=card();label(c,"Automatic archiving",20,true);label(c,"Checks about every 6 hours and catches up when opened. Android chooses the exact run time; force-stop suspends jobs until the app is reopened.",14,false);
         c.addView(button("Open app battery/settings",()->startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())))));
     }
     private void data() {
-        LinearLayout c=card();label(c,"Archive health",20,true);label(c,status,14,false);label(c,days.size()+" daily records",24,true);
+        LinearLayout c=card();label(c,"Archive health",20,true);label(c,ArchiveHealth.summary(this),14,false);label(c,days.size()+" daily records",24,true);
         label(c,"Background job: "+(ArchiveScheduler.isScheduled(this)?"scheduled":"not scheduled"),14,false);
         label(c,"Older Android summaries are estimates, not complete daily records. Export before uninstalling.",14,false);
         c.addView(button("Import CSV",()->startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*"),1002)));

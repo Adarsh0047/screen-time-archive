@@ -12,10 +12,20 @@ public class ArchiveJobService extends JobService {
     @Override
     public boolean onStartJob(JobParameters params) {
         executor.execute(() -> {
-            if (UsagePermission.isGranted(this)) {
-                new UsageRepository(this).archiveRecentDays();
+            boolean retry = false;
+            try {
+                if (UsagePermission.isGranted(this)) {
+                    new UsageRepository(this).archiveRecentDays();
+                } else {
+                    ArchiveHealth.recordFailure(this,
+                            new IllegalStateException("Usage Access is disabled"));
+                }
+            } catch (Exception error) {
+                ArchiveHealth.recordFailure(this, error);
+                retry = true;
             }
-            jobFinished(params, false);
+            DaytraceWidget.requestUpdate(this);
+            jobFinished(params, retry);
         });
         return true;
     }
