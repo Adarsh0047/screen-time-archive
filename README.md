@@ -51,7 +51,7 @@ APK you built from source you control.
 - Weekday, peak-day, trend, and under-six-hour streak insights
 - Automatic daily collection with ten-day catch-up and boot persistence
 - Six-hour background checks, retry tracking, gap detection, and monotonic saves
-- Cyan home-screen widget with today, target progress, top apps, and sync health
+- Material You home-screen widget with today, target progress, top apps, and sync health
 - Duplicate-safe CSV import plus CSV export
 - Four-tab Material-style interface; no network permission or analytics
 
