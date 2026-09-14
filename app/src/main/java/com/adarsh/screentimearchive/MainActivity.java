@@ -83,8 +83,11 @@ public class MainActivity extends Activity {
         setContentView(root); root.requestApplyInsets();
         LinearLayout header=new LinearLayout(this); header.setGravity(Gravity.CENTER_VERTICAL); header.setPadding(dp(20),dp(14),dp(16),dp(8));
         TextView title=text("Daytrace",24,true); header.addView(title,new LinearLayout.LayoutParams(0,-2,1));
-        Button settings=button("Settings",()->{page="Settings";render();}); header.addView(settings); root.addView(header);
-        addLeadingIcon(settings,R.drawable.ic_settings,accent);
+        if(!page.equals("Settings")) {
+            Button settings=button("Settings",()->{page="Settings";render();}); header.addView(settings);
+            addLeadingIcon(settings,R.drawable.ic_settings,accent);
+        }
+        root.addView(header);
         ScrollView scroll=new ScrollView(this); scroll.setFillViewport(true); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         body=new LinearLayout(this); body.setOrientation(1); body.setPadding(dp(20),dp(12),dp(20),dp(28)); scroll.addView(body);
         label(body,pageTitle(page),30,true);
@@ -257,12 +260,28 @@ public class MainActivity extends Activity {
     }
     private void settings() {
         LinearLayout c=card();label(c,"Appearance",20,true);
-        for(String mode:new String[]{"Dark","Light","System"})c.addView(button((prefs.getString("theme","Dark").equals(mode)?"✓ ":"")+mode,()->{prefs.edit().putString("theme",mode).apply();render();}));
+        LinearLayout modes=new LinearLayout(this); modes.setPadding(0,dp(8),0,0);
+        String currentMode=prefs.getString("theme","Dark");
+        for(String mode:new String[]{"Dark","Light","System"}) {
+            Button option=chip(mode,currentMode.equals(mode),()->{prefs.edit().putString("theme",mode).apply();render();});
+            option.setMinWidth(0); option.setPadding(dp(4),0,dp(4),0);
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(44),1); lp.setMargins(dp(3),0,dp(3),0); modes.addView(option,lp);
+        }
+        c.addView(modes);
         c=card();label(c,"Daily target",20,true);label(c,duration(prefs.getInt("target",360)*60000L),23,true);
-        c.addView(button("Change target",()->{EditText input=new EditText(this);input.setInputType(2);input.setText(""+prefs.getInt("target",360));new AlertDialog.Builder(this).setTitle("Target in minutes (1–1440)").setView(input).setPositiveButton("Save",(d,w)->{try{int v=Integer.parseInt(input.getText().toString());if(v<1||v>1440)throw new Exception();prefs.edit().putInt("target",v).apply();render();}catch(Exception e){Toast.makeText(this,"Enter 1–1440 minutes",1).show();}}).setNegativeButton("Cancel",null).show();}));
-        c=card();label(c,"History start date",20,true);c.addView(button(UsageRepository.formatDate(start),()->choose(d->{start=UsageRepository.atStartOfDay(d);prefs.edit().putLong("purchase_date",start).apply();refresh();})));
+        addAction(c,button("Set hours and minutes",this::chooseTarget));
+        c=card();label(c,"History start date",20,true);addAction(c,button(UsageRepository.formatDate(start),()->choose(d->{start=UsageRepository.atStartOfDay(d);prefs.edit().putLong("purchase_date",start).apply();refresh();})));
         c=card();label(c,"Automatic archiving",20,true);label(c,"Checks about every 6 hours and catches up when opened. Android chooses the exact run time; force-stop suspends jobs until the app is reopened.",14,false);
-        c.addView(button("Open app battery/settings",()->startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())))));
+        addAction(c,button("Open app battery settings",()->startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())))));
+    }
+    private void chooseTarget() {
+        int current=prefs.getInt("target",360);
+        TimePickerDialog picker=new TimePickerDialog(this,(view,hours,minutes)->{
+            int total=hours*60+minutes;
+            if(total<1){Toast.makeText(this,"Choose at least 1 minute",Toast.LENGTH_SHORT).show();return;}
+            prefs.edit().putInt("target",total).apply(); DaytraceWidget.requestUpdate(this); render();
+        },current/60,current%60,true);
+        picker.setTitle("Daily target · hours and minutes"); picker.show();
     }
     private void data() {
         LinearLayout c=card();label(c,"Archive health",20,true);label(c,ArchiveHealth.summary(this),14,false);label(c,days.size()+" daily records",24,true);
