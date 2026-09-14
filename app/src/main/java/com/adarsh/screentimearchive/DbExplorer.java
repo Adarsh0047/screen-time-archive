@@ -94,16 +94,17 @@ final class DbExplorer implements AutoCloseable {
 
     private static void enforceReadOnly(String sql) {
         String upper = sql.toUpperCase(Locale.ROOT);
-        boolean read = upper.startsWith("SELECT ") || upper.equals("SELECT") ||
-                upper.startsWith("WITH ") || upper.startsWith("WITH\n") ||
-                upper.startsWith("EXPLAIN ");
+        boolean read = upper.matches("(?s)^(SELECT|WITH|EXPLAIN)(\\s|$).*");
         if (upper.startsWith("PRAGMA ")) {
             String pragma = upper.substring(7).trim();
-            read = !pragma.contains("=") && Arrays.stream(new String[]{
+            if (pragma.endsWith(";")) pragma=pragma.substring(0,pragma.length()-1).trim();
+            boolean introspection = !pragma.contains("=") && Arrays.stream(new String[]{
                     "TABLE_INFO", "TABLE_XINFO", "INDEX_LIST", "INDEX_INFO",
-                    "INDEX_XINFO", "FOREIGN_KEY_LIST", "DATABASE_LIST",
-                    "COMPILE_OPTIONS", "USER_VERSION", "SCHEMA_VERSION"
+                    "INDEX_XINFO", "FOREIGN_KEY_LIST"
             }).anyMatch(pragma::startsWith);
+            boolean scalar = Arrays.asList("DATABASE_LIST", "COMPILE_OPTIONS",
+                    "USER_VERSION", "SCHEMA_VERSION").contains(pragma);
+            read = introspection || scalar;
         }
         if (!read) {
             throw new IllegalArgumentException(
