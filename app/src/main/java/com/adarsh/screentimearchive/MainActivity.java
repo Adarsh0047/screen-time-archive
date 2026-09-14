@@ -31,6 +31,11 @@ public class MainActivity extends Activity {
     private SharedPreferences prefs;
     private String status = "Loading saved archive…";
     private long start;
+    private String dbTable;
+    private int dbOffset;
+    private String dbQuery = "SELECT * FROM daily_usage ORDER BY day_start DESC LIMIT 100";
+    private DbExplorer.QueryResult dbQueryResult;
+    private String dbQueryError;
     private int dp(float v) { return Math.round(v * getResources().getDisplayMetrics().density); }
     private String date(LocalDate d) { return d.format(DateTimeFormatter.ofPattern("d MMM yyyy")); }
     private String duration(long v) { return UsageRepository.formatDuration(v); }
@@ -92,16 +97,16 @@ public class MainActivity extends Activity {
         body=new LinearLayout(this); body.setOrientation(1); body.setPadding(dp(20),dp(12),dp(20),dp(28)); scroll.addView(body);
         label(body,pageTitle(page),30,true);
         if (!UsagePermission.isGranted(this)) { LinearLayout c=card(); label(c,"Enable automatic archiving",19,true); label(c,"Grant Usage Access once. No manual scan is required.",14,false); c.addView(button("Grant Usage Access",()->startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)))); }
-        switch(page) { case "History": history();break; case "Insights": insights();break; case "Settings": settings();break; case "Data": data();break; default: overview(); }
+        switch(page) { case "History": history();break; case "Insights": insights();break; case "Database": database();break; case "Settings": settings();break; case "Data": data();break; default: overview(); }
         LinearLayout nav=new LinearLayout(this); nav.setBackgroundColor(surface); nav.setPadding(dp(6),dp(3),dp(6),dp(3));
-        String[] pages={"Overview","History","Insights","Data"};
-        String[] labels={"Today","History","Insights","Archive"};
-        int[] icons={R.drawable.ic_today,R.drawable.ic_history,R.drawable.ic_insights,R.drawable.ic_archive};
+        String[] pages={"Overview","History","Insights","Database","Data"};
+        String[] labels={"Today","History","Insights","DB","Archive"};
+        int[] icons={R.drawable.ic_today,R.drawable.ic_history,R.drawable.ic_insights,R.drawable.ic_database,R.drawable.ic_archive};
         for(int i=0;i<pages.length;i++) {
             final String destination=pages[i];
             Button b=button(labels[i],()->{page=destination;render();});
             int color=page.equals(destination)?accent:muted;
-            b.setTextSize(11); b.setTextColor(color); b.setMinWidth(0); b.setPadding(0,dp(4),0,dp(3));
+            b.setTextSize(10); b.setTextColor(color); b.setMinWidth(0); b.setPadding(0,dp(4),0,dp(3));
             b.setGravity(Gravity.CENTER); b.setBackgroundColor(Color.TRANSPARENT);
             Drawable icon=icon(icons[i],color); b.setCompoundDrawables(null,icon,null,null); b.setCompoundDrawablePadding(dp(2));
             nav.addView(b,new LinearLayout.LayoutParams(0,dp(64),1));
@@ -117,7 +122,7 @@ public class MainActivity extends Activity {
         Button b=new Button(this); b.setText(s); b.setTextSize(14); b.setTextColor(accent); b.setAllCaps(false); b.setMinHeight(dp(48));
         b.setBackground(shape(tonal)); b.setPadding(dp(16),0,dp(16),0); b.setOnClickListener(v->action.run()); return b;
     }
-    private String pageTitle(String value) { return value.equals("Overview")?"Today":value.equals("Data")?"Archive":value; }
+    private String pageTitle(String value) { return value.equals("Overview")?"Today":value.equals("Data")?"Archive":value.equals("Database")?"DB Explorer":value; }
     private Drawable icon(int resource,int color) { Drawable d=getDrawable(resource).mutate(); d.setTint(color); d.setBounds(0,0,dp(22),dp(22)); return d; }
     private void addLeadingIcon(Button button,int resource,int color) { button.setCompoundDrawables(icon(resource,color),null,null,null); button.setCompoundDrawablePadding(dp(7)); }
     private GradientDrawable shape(int color) { GradientDrawable d=new GradientDrawable(); d.setColor(color); d.setCornerRadius(dp(24)); return d; }
@@ -282,6 +287,107 @@ public class MainActivity extends Activity {
             prefs.edit().putInt("target",total).apply(); DaytraceWidget.requestUpdate(this); render();
         },current/60,current%60,true);
         picker.setTitle("Daily target · hours and minutes"); picker.show();
+    }
+    private void database() {
+        final int pageSize=50;
+        List<String> tables;
+        DbExplorer.QueryResult schema, rows;
+        long count;
+        try(DbExplorer explorer=new DbExplorer(this)) {
+            tables=explorer.tables();
+            if(tables.isEmpty()) {
+                LinearLayout empty=card(); label(empty,"No database tables found",20,true);
+                label(empty,"The local archive will appear here after it is created.",14,false); return;
+            }
+            if(dbTable==null||!tables.contains(dbTable)) dbTable=tables.contains("daily_usage")?"daily_usage":tables.get(0);
+            count=explorer.rowCount(dbTable);
+            if(dbOffset>=count) dbOffset=Math.max(0,((int)Math.max(0,count-1)/pageSize)*pageSize);
+            schema=explorer.schema(dbTable);
+            rows=explorer.rows(dbTable,dbOffset,pageSize);
+        } catch(Exception e) {
+            LinearLayout error=card();label(error,"Database unavailable",20,true);
+            label(error,e.getMessage()==null?"The archive could not be opened.":e.getMessage(),14,false);return;
+        }
+
+        LinearLayout intro=card();label(intro,"Local SQLite archive",20,true);
+        label(intro,"screen_time_archive.db · private to Daytrace",14,false);
+        label(intro,"Explorer queries are read-only. Results are capped at 200 rows.",13,false);
+
+        LinearLayout chooser=card();label(chooser,"Tables",20,true);
+        HorizontalScrollView tableScroll=new HorizontalScrollView(this);tableScroll.setHorizontalScrollBarEnabled(false);
+        LinearLayout tableChips=new LinearLayout(this);
+        for(String table:tables) {
+            Button option=chip(table,table.equals(dbTable),()->{dbTable=table;dbOffset=0;dbQueryResult=null;dbQueryError=null;render();});
+            tableChips.addView(option);
+        }
+        tableScroll.addView(tableChips);chooser.addView(tableScroll);
+
+        LinearLayout structure=card();label(structure,dbTable+" · schema",20,true);
+        addResultTable(structure,schema,12);
+
+        LinearLayout records=card();
+        long first=count==0?0:dbOffset+1,last=Math.min(count,dbOffset+pageSize);
+        label(records,"Rows "+first+"–"+last+" of "+count,20,true);
+        addResultTable(records,rows,pageSize);
+        LinearLayout paging=new LinearLayout(this);paging.setPadding(0,dp(10),0,0);
+        Button previous=button("Previous",()->{dbOffset=Math.max(0,dbOffset-pageSize);render();});
+        previous.setEnabled(dbOffset>0);previous.setAlpha(dbOffset>0?1f:.45f);
+        LinearLayout.LayoutParams half=new LinearLayout.LayoutParams(0,dp(48),1);half.setMargins(0,0,dp(5),0);paging.addView(previous,half);
+        Button next=button("Next",()->{dbOffset+=pageSize;render();});
+        next.setEnabled(dbOffset+pageSize<count);next.setAlpha(dbOffset+pageSize<count?1f:.45f);
+        LinearLayout.LayoutParams other=new LinearLayout.LayoutParams(0,dp(48),1);other.setMargins(dp(5),0,0,0);paging.addView(next,other);
+        records.addView(paging);
+
+        LinearLayout console=card();label(console,"Read-only SQL",20,true);
+        label(console,"Run SELECT, WITH, EXPLAIN, or safe PRAGMA queries against the live local archive.",13,false);
+        EditText editor=new EditText(this);editor.setText(dbQuery);editor.setTextColor(ink);editor.setHintTextColor(muted);
+        editor.setTextSize(14);editor.setTypeface(Typeface.MONOSPACE);editor.setGravity(Gravity.TOP|Gravity.START);
+        editor.setMinLines(4);editor.setMaxLines(8);editor.setPadding(dp(14),dp(12),dp(14),dp(12));editor.setBackground(shape(bg));
+        LinearLayout.LayoutParams editorParams=new LinearLayout.LayoutParams(-1,-2);editorParams.topMargin=dp(8);console.addView(editor,editorParams);
+        addAction(console,button("Run query",()->runDatabaseQuery(editor.getText().toString())));
+        if(dbQueryError!=null) {
+            TextView error=text(dbQueryError,13,false);error.setTextColor(Color.parseColor("#FF8A80"));error.setPadding(0,dp(10),0,0);console.addView(error);
+        }
+        if(dbQueryResult!=null) {
+            label(console,dbQueryResult.rows.size()+" result row"+(dbQueryResult.rows.size()==1?"":"s"),16,true);
+            addResultTable(console,dbQueryResult,200);
+            if(dbQueryResult.truncated) label(console,"Showing the first 200 rows.",12,false);
+        }
+        LinearLayout help=card();label(help,"Archive columns",18,true);
+        label(help,"day_start and collected_at are Unix epoch milliseconds. duration_ms and duration are milliseconds.",13,false);
+    }
+
+    private void runDatabaseQuery(String sql) {
+        dbQuery=sql;dbQueryResult=null;dbQueryError=null;
+        Toast.makeText(this,"Running read-only query…",Toast.LENGTH_SHORT).show();
+        worker.execute(()->{
+            DbExplorer.QueryResult queryResult=null;String error=null;
+            try(DbExplorer explorer=new DbExplorer(this)){queryResult=explorer.query(sql);}
+            catch(Exception e){error=e.getMessage()==null?"Query failed":e.getMessage();}
+            DbExplorer.QueryResult finalResult=queryResult;String finalError=error;
+            runOnUiThread(()->{if(isDestroyed())return;dbQueryResult=finalResult;dbQueryError=finalError;if(page.equals("Database"))render();});
+        });
+    }
+
+    private void addResultTable(LinearLayout parent,DbExplorer.QueryResult result,int maxRows) {
+        if(result.columns.isEmpty()){label(parent,"Query completed with no columns.",13,false);return;}
+        HorizontalScrollView horizontal=new HorizontalScrollView(this);horizontal.setFillViewport(false);
+        LinearLayout table=new LinearLayout(this);table.setOrientation(LinearLayout.VERTICAL);
+        table.addView(databaseRow(result.columns,true));
+        int shown=Math.min(maxRows,result.rows.size());
+        for(int i=0;i<shown;i++)table.addView(databaseRow(result.rows.get(i),false));
+        if(shown==0)label(table,"No rows",13,false);
+        horizontal.addView(table);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=dp(8);parent.addView(horizontal,lp);
+    }
+
+    private LinearLayout databaseRow(List<String> values,boolean header) {
+        LinearLayout row=new LinearLayout(this);row.setBackgroundColor(header?tonal:Color.TRANSPARENT);
+        for(String value:values) {
+            TextView cell=text(value==null?"NULL":value,12,header);cell.setTypeface(Typeface.MONOSPACE,header?Typeface.BOLD:Typeface.NORMAL);
+            cell.setMaxLines(header?2:4);cell.setPadding(dp(10),dp(8),dp(10),dp(8));
+            LinearLayout.LayoutParams cellParams=new LinearLayout.LayoutParams(dp(154),-2);row.addView(cell,cellParams);
+        }
+        return row;
     }
     private void data() {
         LinearLayout c=card();label(c,"Archive health",20,true);label(c,ArchiveHealth.summary(this),14,false);label(c,days.size()+" daily records",24,true);

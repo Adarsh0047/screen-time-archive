@@ -52,8 +52,9 @@ APK you built from source you control.
 - Automatic daily collection with ten-day catch-up and boot persistence
 - Six-hour background checks, retry tracking, gap detection, and monotonic saves
 - Material You home-screen widget with today, target progress, top apps, and sync health
+- Read-only SQLite explorer with schema browsing, paginated rows, and a SQL console
 - Duplicate-safe CSV import plus CSV export
-- Four-tab Material-style interface; no network permission or analytics
+- Five-tab Material-style interface; no network permission or analytics
 
 ## First run
 
